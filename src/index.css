@@ -1,0 +1,21 @@
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Inter', 'Segoe UI', sans-serif;
+  background: #f8fafc;
+  color: #0f172a;
+  -webkit-font-smoothing: antialiased;
+}
+
+button:hover {
+  opacity: 0.88;
+}
+
+input:focus, select:focus {
+  outline: 2px solid #60a5fa;
+  outline-offset: 1px;
+}
