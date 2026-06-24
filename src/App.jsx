@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import { INITIAL_STAFF, DEFAULT_RULES, SHIFT_STYLES, WEEKEND_DAYS } from './data/constants';
 import { generateRoster } from './utils/generateRoster';
 import { exportCSV } from './utils/exportCSV';
+import { exportPDF } from './utils/exportPDF';
 import StatsBar    from './components/StatsBar';
 import RosterTable from './components/RosterTable';
 import RulesPanel  from './components/RulesPanel';
@@ -48,6 +49,11 @@ export default function App() {
     showToast('CSV exported!');
   };
 
+  const handleExportPDF = () => {
+    exportPDF(staff, roster, weekLabel);
+    showToast('PDF exported!');
+  };
+
   return (
     <div style={{ minHeight: '100vh', background: '#f8fafc', padding: '24px 16px' }}>
 
@@ -69,7 +75,7 @@ export default function App() {
             <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 2, color: '#94a3b8', textTransform: 'uppercase', marginBottom: 2 }}>
               Auto Roster Generator
             </div>
-            <h1 style={{ fontSize: 26, fontWeight: 800, color: '#0f172a', marginBottom: 4 }}>Staff Schedule</h1>
+            <h1 style={{ fontSize: 26, fontWeight: 800, color: '#0f172a', marginBottom: 4 }}>Shift Roster - Bar Team</h1>
             <p style={{ fontSize: 12, color: '#64748b' }}>
               🔒 No Off on <strong>Fri · Sat · Sun</strong> &nbsp;·&nbsp;
               No PM→AM back-to-back &nbsp;·&nbsp;
@@ -89,6 +95,7 @@ export default function App() {
             </button>
             <button onClick={regenerate}    style={btn('#0f172a', '#fff')}>⟳ Generate</button>
             <button onClick={handleExport}  style={btn('#16a34a', '#fff')}>↓ CSV</button>
+            <button onClick={handleExportPDF}  style={btn('#dc2626', '#fff')}>↓ PDF</button>
           </div>
         </div>
 
