@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { POSITIONS, WEEKEND_DAYS, DAYS } from '../data/constants';
+import { POSITIONS, WEEKEND_DAYS, DAYS, makeCell } from '../data/constants';
 
 export default function AddStaffForm({ onAdd }) {
   const [name, setName] = useState('');
@@ -13,7 +13,7 @@ export default function AddStaffForm({ onAdd }) {
     const member = { id: Date.now(), name: name.trim(), position: pos, color: colMap[pos] };
     // Default: Off on weekdays, AM on weekends
     const row = {};
-    DAYS.forEach(d => { row[d] = WEEKEND_DAYS.includes(d) ? 'AM' : 'Off'; });
+    DAYS.forEach(d => { row[d] = makeCell(WEEKEND_DAYS.includes(d) ? 'AM' : 'Off', 'none'); });
     onAdd(member, row);
     setName('');
   };

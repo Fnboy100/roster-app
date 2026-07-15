@@ -1,4 +1,4 @@
-import { DAYS, WEEKEND_DAYS } from '../data/constants';
+import { DAYS, WEEKEND_DAYS, OUTLETS, makeCell } from '../data/constants';
 
 /**
  * Constraint-based weekly roster generator — v3 (precise fairness edition)
@@ -13,7 +13,7 @@ import { DAYS, WEEKEND_DAYS } from '../data/constants';
  *     (No two Bartenders or two Barbacks off on the same day)
  *  6. Every day must have at least 1 AM and 1 PM per non-supervisor group.
  */
-export function generateRoster(staff, rules) {
+/*  export function generateRoster(staff, rules) {
 
   // ── 1. Separate staff by role ────────────────────────────────────────────
   const supervisors = staff.filter(s => s.position === 'Supervisor');
@@ -171,6 +171,171 @@ export function generateRoster(staff, rules) {
     });
 
     // Commit day
+    staff.forEach(s => { roster[s.id][day] = dayAssignments[s.id]; });
+  });
+
+  return roster;
+}
+*/
+
+// ─── roster-app/src/utils/generateRoster.js ──────────────────────────────────
+
+/**
+ * Two-phase constraint-based roster generator — v4 (with outlet support)
+ *
+ * Each cell is now an object: { shift: "AM"|"PM"|"Off", outlet: "none"|"T"|"RST" }
+ *
+ * Outlet assignment rules:
+ *  - "Off" cells always get outlet "none"
+ *  - If rules.defaultOutlet is "random" → randomly pick T or RST per working cell
+ *  - If rules.defaultOutlet is "T" or "RST" → all working cells get that outlet
+ *  - If rules.defaultOutlet is "none" → no outlet tag (plain AM / PM)
+ *
+ * All other scheduling constraints remain identical to v3.
+ */
+export function generateRoster(staff, rules) {
+
+  // ── PHASE 1: Pre-plan off days ───────────────────────────────────────────
+  const supervisors    = staff.filter(s => s.position === 'Supervisor');
+  const nonSupervisors = staff.filter(s => s.position !== 'Supervisor');
+
+  const byPosition = {};
+  nonSupervisors.forEach(s => {
+    if (!byPosition[s.position]) byPosition[s.position] = [];
+    byPosition[s.position].push(s);
+  });
+
+  const weekdays = DAYS.filter(d => !WEEKEND_DAYS.includes(d));
+  const targetOffDays = Math.max(0, 7 - rules.maxWorkDays);
+
+  const offDayMap = {};
+  nonSupervisors.forEach(s => { offDayMap[s.id] = new Set(); });
+
+  Object.entries(byPosition).forEach(([, group]) => {
+    const shuffledWeekdays = [...weekdays].sort(() => Math.random() - 0.5);
+
+    group.forEach(s => {
+      const takenByGroup = new Set();
+      group.forEach(other => {
+        if (other.id !== s.id) offDayMap[other.id].forEach(d => takenByGroup.add(d));
+      });
+
+      let assigned = 0;
+      const pool = [...shuffledWeekdays].sort(() => Math.random() - 0.5);
+      for (const day of pool) {
+        if (assigned >= targetOffDays) break;
+        if (takenByGroup.has(day)) continue;
+        offDayMap[s.id].add(day);
+        assigned++;
+      }
+      // Fallback
+      if (assigned < targetOffDays) {
+        for (const day of pool) {
+          if (assigned >= targetOffDays) break;
+          if (!offDayMap[s.id].has(day)) { offDayMap[s.id].add(day); assigned++; }
+        }
+      }
+    });
+  });
+
+  // ── PHASE 2: Assign shifts day by day ────────────────────────────────────
+  const roster    = {};
+  const lastShift = {};
+  staff.forEach(s => { roster[s.id] = {}; });
+
+  // Helper: pick outlet for a working cell
+  function pickOutlet() {
+    if (rules.defaultOutlet === 'random') {
+      const workingOutlets = OUTLETS.filter(o => o !== 'none');
+      return workingOutlets[Math.floor(Math.random() * workingOutlets.length)];
+    }
+    return rules.defaultOutlet || 'none';
+  }
+
+  DAYS.forEach((day) => {
+    const isWeekend = WEEKEND_DAYS.includes(day);
+    const dayAssignments = {}; // id → { shift, outlet }
+
+    // Supervisors: always PM
+    supervisors.forEach(s => {
+      dayAssignments[s.id] = makeCell('PM', pickOutlet());
+      lastShift[s.id] = 'PM';
+    });
+
+    // Apply pre-planned off days (weekdays only)
+    nonSupervisors.forEach(s => {
+      if (!isWeekend && offDayMap[s.id].has(day)) {
+        dayAssignments[s.id] = makeCell('Off', 'none');
+      }
+    });
+
+    // Assign AM/PM within each position group
+    Object.entries(byPosition).forEach(([, group]) => {
+      const unassigned = group
+        .filter(s => dayAssignments[s.id] === undefined)
+        .sort(() => Math.random() - 0.5);
+
+      const amCount = group.filter(s => dayAssignments[s.id]?.shift === 'AM').length;
+      const pmCount = group.filter(s => dayAssignments[s.id]?.shift === 'PM').length;
+
+      let needAM = amCount === 0;
+      let needPM = pmCount === 0;
+
+      unassigned.forEach((s, idx) => {
+        const prev = lastShift[s.id];
+        const isLast = idx === unassigned.length - 1;
+
+        let chosenShift;
+
+        if (isLast && needAM && !needPM) {
+          chosenShift = 'AM';
+        } else if (isLast && needPM && !needAM) {
+          chosenShift = 'PM';
+        } else if (isLast && needAM && needPM) {
+          chosenShift = 'PM';
+          const prev2 = unassigned[idx - 1];
+          if (prev2 && dayAssignments[prev2.id]?.shift === 'PM') {
+            dayAssignments[prev2.id] = makeCell('AM', dayAssignments[prev2.id].outlet);
+          }
+        } else {
+          if (rules.noBackToBack && prev === 'PM') {
+            chosenShift = Math.random() < 0.65 ? 'PM' : 'AM';
+          } else {
+            chosenShift = Math.random() < 0.5 ? 'AM' : 'PM';
+          }
+        }
+
+        dayAssignments[s.id] = makeCell(chosenShift, pickOutlet());
+        lastShift[s.id] = chosenShift;
+        if (chosenShift === 'AM') needAM = false;
+        if (chosenShift === 'PM') needPM = false;
+      });
+    });
+
+    // Safety net: ensure ≥1 AM and ≥1 PM per group
+    Object.entries(byPosition).forEach(([, group]) => {
+      const working = group.filter(s => dayAssignments[s.id]?.shift !== 'Off');
+      if (!working.length) return;
+
+      const hasAM = working.some(s => dayAssignments[s.id]?.shift === 'AM');
+      const hasPM = working.some(s => dayAssignments[s.id]?.shift === 'PM');
+
+      if (!hasAM) {
+        const flip = working.find(s => dayAssignments[s.id]?.shift === 'PM');
+        if (flip) {
+          dayAssignments[flip.id] = makeCell('AM', dayAssignments[flip.id].outlet);
+          lastShift[flip.id] = 'AM';
+        }
+      }
+      if (!hasPM) {
+        const flip = working.find(s => dayAssignments[s.id]?.shift === 'AM');
+        if (flip) {
+          dayAssignments[flip.id] = makeCell('PM', dayAssignments[flip.id].outlet);
+          lastShift[flip.id] = 'PM';
+        }
+      }
+    });
+
     staff.forEach(s => { roster[s.id][day] = dayAssignments[s.id]; });
   });
 

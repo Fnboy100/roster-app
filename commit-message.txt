@@ -1,0 +1,39 @@
+feat(frontend): add inventory accountability module alongside roster app
+
+Adds a full inventory & stock accountability UI wired to the FastAPI
+backend, while preserving the original roster tool unchanged.
+
+Auth & routing
+- JWT auth (AuthContext, Login, ProtectedRoute) gating all inventory/admin routes
+- Role-based nav (admin, manager, outlet_manager, supervisor, storekeeper, staff)
+- Roster tool moved to a public /roster route — no login or backend required
+- SPA rewrite added to vercel.json for client-side routing on refresh/deep link
+
+Inventory module
+- Dashboard: summary cards + low-stock alerts
+- Requisitions: list, filters, create, and full workflow (approve/reject,
+  issue in full or partial, complete, cancel)
+- Stock: restock / wastage / return / adjustment forms + movement history
+- Daily closings: preview, close, history
+- Reports: movement/requisition/wastage summaries with CSV export
+- Audit log viewer (admin/manager only)
+- Admin: outlets, departments, items & thresholds, user management
+
+API layer
+- One module per backend router (auth, outlets, departments, items,
+  requisitions, stock, dailyClosings, notifications, reports, auditLogs,
+  users, websocket), mirroring backend request/response shapes exactly
+- Live notifications via REST + WebSocket
+- Department-scoping hook shared across all filtered views
+
+Bug fixes
+- generateRoster.js: add missing makeCell/OUTLETS import (was crashing
+  RosterApp on mount — v4 multi-outlet support was otherwise complete)
+- AddStaffForm.jsx: default row for a new staff member now uses
+  makeCell({shift, outlet}) instead of bare strings
+- RosterTable.jsx: fallback cell for a missing roster entry now matches
+  the {shift, outlet} object shape
+
+Docs
+- README rewritten to document the full frontend structure, routes, and
+  API layer (previously only covered the roster tool)

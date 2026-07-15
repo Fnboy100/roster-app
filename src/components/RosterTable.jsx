@@ -1,5 +1,5 @@
 import ShiftBadge from './ShiftBadge';
-import { DAYS, WEEKEND_DAYS, POSITION_COLORS, POSITIONS } from '../data/constants';
+import { DAYS, WEEKEND_DAYS, POSITION_COLORS, POSITIONS, makeCell } from '../data/constants';
 
 export default function RosterTable({ staff, roster, rules, editMode, onCellChange, onRemove }) {
   const grouped = POSITIONS
@@ -57,7 +57,7 @@ export default function RosterTable({ staff, roster, rules, editMode, onCellChan
                       background: isWknd ? 'rgba(254,226,226,0.2)' : 'transparent',
                     }}>
                       <ShiftBadge
-                        value={roster[s.id]?.[day] || 'Off'}
+                        value={roster[s.id]?.[day] || makeCell('Off', 'none')}
                         editable={editMode}
                         locked={isWknd && rules.noOffWeekends}
                         onChange={v => onCellChange(s.id, day, v)}

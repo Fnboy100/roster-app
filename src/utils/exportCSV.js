@@ -1,9 +1,11 @@
-import { DAYS } from '../data/constants';
+// ─── roster-app/src/utils/exportCSV.js ───────────────────────────────────────
+
+import { DAYS, cellLabel } from '../data/constants';
 
 export function exportCSV(staff, roster, weekLabel) {
   const header = ['Name', 'Position', ...DAYS].join(',');
   const rows = staff.map(s =>
-    [s.name, s.position, ...DAYS.map(d => roster[s.id]?.[d] || 'Off')].join(',')
+    [s.name, s.position, ...DAYS.map(d => cellLabel(roster[s.id]?.[d]))].join(',')
   );
   const csv = [header, ...rows].join('\n');
   const blob = new Blob([csv], { type: 'text/csv' });
