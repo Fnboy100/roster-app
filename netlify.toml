@@ -1,1 +1,13 @@
-command = "npm install && npm run build"
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+# SPA fallback: any path Netlify can't match to a real file (e.g. /roster,
+# /inventory, /admin/users on a direct load or refresh) falls back to
+# index.html so React Router can handle it client-side. Without this,
+# every route except "/" 404s the moment it's loaded directly instead of
+# navigated to from within the app.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
