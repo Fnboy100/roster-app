@@ -1,4 +1,4 @@
-const WS_BASE_URL = import.meta.env.VITE_WS_BASE_URL || 'ws://restaurant-inventory-api-8h0b.onrender.com/api/v1';
+const WS_BASE_URL = import.meta.env.VITE_WS_BASE_URL || 'wss://restaurant-inventory-api-8h0b.onrender.com/api/v1';
 
 /**
  * Opens the live-push WebSocket. Browsers can't set custom headers on a
