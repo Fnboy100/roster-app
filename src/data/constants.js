@@ -36,7 +36,6 @@ export const INITIAL_STAFF = [
   { id: 7,  name: "Timothy",   position: "Barback"    },
   { id: 8,  name: "Paul",  position: "Barback"    },
   { id: 9, name: "Isaac",     position: "Barback"    },
-  { id: 10, name: "Emmanuel",  position: "Barback"    },
 ];
 
 export const POSITION_COLORS = {

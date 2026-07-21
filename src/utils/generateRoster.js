@@ -192,6 +192,13 @@ import { DAYS, WEEKEND_DAYS, OUTLETS, makeCell } from '../data/constants';
  *  - If rules.defaultOutlet is "none" → no outlet tag (plain AM / PM)
  *
  * All other scheduling constraints remain identical to v3.
+ *
+ * rules.noOffWeekends (default true, set in RulesPanel):
+ *  - true  → Off days are only ever pre-planned/applied on Mon–Thu, exactly
+ *            like the original locked behavior (nobody is ever Off on
+ *            Fri/Sat/Sun).
+ *  - false → the Off-day pool spans the full week, so generation can place
+ *            someone's Off day on Friday, Saturday, or Sunday too.
  */
 export function generateRoster(staff, rules) {
 
@@ -205,14 +212,19 @@ export function generateRoster(staff, rules) {
     byPosition[s.position].push(s);
   });
 
-  const weekdays = DAYS.filter(d => !WEEKEND_DAYS.includes(d));
+  // Off-day pool: weekdays only when the "No Off on Fri/Sat/Sun" rule is on
+  // (matches the original locked behavior exactly); the full week when it's
+  // off, so Off days can actually land on the weekend.
+  const offDayPool = rules.noOffWeekends
+    ? DAYS.filter(d => !WEEKEND_DAYS.includes(d))
+    : [...DAYS];
   const targetOffDays = Math.max(0, 7 - rules.maxWorkDays);
 
   const offDayMap = {};
   nonSupervisors.forEach(s => { offDayMap[s.id] = new Set(); });
 
   Object.entries(byPosition).forEach(([, group]) => {
-    const shuffledWeekdays = [...weekdays].sort(() => Math.random() - 0.5);
+    const shuffledPool = [...offDayPool].sort(() => Math.random() - 0.5);
 
     group.forEach(s => {
       const takenByGroup = new Set();
@@ -221,7 +233,7 @@ export function generateRoster(staff, rules) {
       });
 
       let assigned = 0;
-      const pool = [...shuffledWeekdays].sort(() => Math.random() - 0.5);
+      const pool = [...shuffledPool].sort(() => Math.random() - 0.5);
       for (const day of pool) {
         if (assigned >= targetOffDays) break;
         if (takenByGroup.has(day)) continue;
@@ -262,9 +274,11 @@ export function generateRoster(staff, rules) {
       lastShift[s.id] = 'PM';
     });
 
-    // Apply pre-planned off days (weekdays only)
+    // Apply pre-planned off days — weekdays only if noOffWeekends is on,
+    // any day of the week (including the weekend) if it's off.
+    const canBeOffToday = !rules.noOffWeekends || !isWeekend;
     nonSupervisors.forEach(s => {
-      if (!isWeekend && offDayMap[s.id].has(day)) {
+      if (canBeOffToday && offDayMap[s.id].has(day)) {
         dayAssignments[s.id] = makeCell('Off', 'none');
       }
     });
