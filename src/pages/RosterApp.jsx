@@ -13,13 +13,36 @@ const btn = (bg, color) => ({
   padding: '8px 15px', fontWeight: 700, fontSize: 13, cursor: 'pointer',
 });
 
+// Computes "Month D – D" (or "Mon D – Mon D" if the week crosses a month
+// boundary) for the Monday–Sunday week containing today. Used only to seed
+// the initial weekLabel — the field stays a free-text input the user can
+// still edit or type over afterward, exactly as before.
+function getCurrentWeekLabel() {
+  const today = new Date();
+  const dow = today.getDay(); // 0=Sun, 1=Mon, ... 6=Sat
+  const diffToMonday = dow === 0 ? -6 : 1 - dow;
+
+  const monday = new Date(today);
+  monday.setDate(today.getDate() + diffToMonday);
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+
+  const startMonth = monday.toLocaleDateString('en-US', { month: 'long' });
+  const endMonth = sunday.toLocaleDateString('en-US', { month: 'long' });
+
+  if (startMonth === endMonth) {
+    return `${startMonth} ${monday.getDate()} \u2013 ${sunday.getDate()}`;
+  }
+  return `${startMonth.slice(0, 3)} ${monday.getDate()} \u2013 ${endMonth.slice(0, 3)} ${sunday.getDate()}`;
+}
+
 export default function RosterApp() {
   const [staff, setStaff]         = useState(INITIAL_STAFF);
   const [roster, setRoster]       = useState(() => generateRoster(INITIAL_STAFF, DEFAULT_RULES));
   const [rules, setRules]         = useState(DEFAULT_RULES);
   const [editMode, setEditMode]   = useState(false);
   const [showRules, setShowRules] = useState(false);
-  const [weekLabel, setWeekLabel] = useState('June 22 – 28');
+  const [weekLabel, setWeekLabel] = useState(getCurrentWeekLabel);
   const [toast, setToast]         = useState('');
 
   const showToast = msg => { setToast(msg); setTimeout(() => setToast(''), 2400); };

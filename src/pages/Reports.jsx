@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useAuth } from '../context/AuthContext';
 import { useDepartmentScope } from '../hooks/useDepartmentScope';
 import { apiErrorMessage } from '../api/client';
 import * as reportsApi from '../api/reports';
+import { exportReportPDF } from '../utils/exportInventoryReportPDF';
 import {
   pageStyle,
   cardStyle,
@@ -17,20 +19,28 @@ import {
   RequisitionStatusBadge,
 } from '../components/inventory/ui';
 
-function SectionHeader({ title, onDownload }) {
+function SectionHeader({ title, onDownloadCsv, onDownloadPdf }) {
   return (
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
       <h2 style={{ fontSize: 15, fontWeight: 800, color: '#0f172a' }}>{title}</h2>
-      {onDownload && (
-        <button onClick={onDownload} style={{ ...btn('#f1f5f9', '#334155'), padding: '6px 12px', fontSize: 12 }}>
-          ↓ CSV
-        </button>
-      )}
+      <div style={{ display: 'flex', gap: 6 }}>
+        {onDownloadCsv && (
+          <button onClick={onDownloadCsv} style={{ ...btn('#f1f5f9', '#334155'), padding: '6px 12px', fontSize: 12 }}>
+            ↓ CSV
+          </button>
+        )}
+        {onDownloadPdf && (
+          <button onClick={onDownloadPdf} style={{ ...btn('#fef2f2', '#b91c1c'), padding: '6px 12px', fontSize: 12 }}>
+            ↓ PDF
+          </button>
+        )}
+      </div>
     </div>
   );
 }
 
 export default function Reports() {
+  const { user } = useAuth();
   const { isMultiDept, departments, departmentId, setDepartmentId } = useDepartmentScope();
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
@@ -69,6 +79,57 @@ export default function Reports() {
     reportsApi.downloadReportCsv(key, { departmentId, dateFrom: dateFrom || undefined, dateTo: dateTo || undefined }).catch(() => {
       setError('Could not download the CSV.');
     });
+  };
+
+  // Imprinted on every exported PDF: who generated it, and what filters were
+  // active when they did — separate from the generation timestamp, which
+  // exportReportPDF stamps itself using the actual export moment.
+  const generatedBy = user ? `${user.full_name} (${user.email})` : 'Unknown user';
+  const filtersLabel = (() => {
+    const parts = [];
+    const deptName = isMultiDept
+      ? departments.find((d) => d.id === departmentId)?.name || 'All departments'
+      : user?.department?.name;
+    if (deptName) parts.push(`Department: ${deptName}`);
+    parts.push(`From: ${dateFrom || 'earliest'}`);
+    parts.push(`To: ${dateTo || 'latest'}`);
+    return parts.join('   \u00b7   ');
+  })();
+
+  const downloadPdf = (key) => {
+    if (key === 'movements') {
+      exportReportPDF({
+        title: 'Stock Movement Totals',
+        columns: ['Movement Type', 'Total Quantity', 'Movement Count'],
+        rows: movements.map((m) => [m.movement_type, formatQty(m.total_quantity), String(m.movement_count)]),
+        generatedBy,
+        filtersLabel,
+      });
+    } else if (key === 'requisitions') {
+      exportReportPDF({
+        title: 'Requisitions by Status',
+        columns: ['Status', 'Count'],
+        rows: requisitionStatuses.map((r) => [r.status, String(r.count)]),
+        generatedBy,
+        filtersLabel,
+      });
+    } else if (key === 'wastage') {
+      exportReportPDF({
+        title: 'Wastage Log',
+        columns: ['Item', 'SKU', 'Department', 'Quantity', 'Reason', 'Performed By', 'Date'],
+        rows: wastage.map((w) => [
+          w.item_name,
+          w.sku,
+          w.department_name,
+          formatQty(w.quantity),
+          w.reason || '\u2014',
+          w.performed_by_name,
+          formatDateTime(w.created_at),
+        ]),
+        generatedBy,
+        filtersLabel,
+      });
+    }
   };
 
   return (
@@ -110,7 +171,7 @@ export default function Reports() {
         <div style={{ color: '#94a3b8', fontSize: 14 }}>Loading…</div>
       ) : (
         <>
-          <SectionHeader title="Stock movement totals" onDownload={() => download('movements')} />
+          <SectionHeader title="Stock movement totals" onDownloadCsv={() => download('movements')} onDownloadPdf={() => downloadPdf('movements')} />
           {movements.length === 0 ? (
             <div style={{ ...emptyStateStyle, marginBottom: 28 }}>No movements in this range.</div>
           ) : (
@@ -126,7 +187,7 @@ export default function Reports() {
             </div>
           )}
 
-          <SectionHeader title="Requisitions by status" onDownload={() => download('requisitions')} />
+          <SectionHeader title="Requisitions by status" onDownloadCsv={() => download('requisitions')} onDownloadPdf={() => downloadPdf('requisitions')} />
           {requisitionStatuses.length === 0 ? (
             <div style={{ ...emptyStateStyle, marginBottom: 28 }}>No requisitions in this range.</div>
           ) : (
@@ -140,7 +201,7 @@ export default function Reports() {
             </div>
           )}
 
-          <SectionHeader title="Wastage log" onDownload={() => download('wastage')} />
+          <SectionHeader title="Wastage log" onDownloadCsv={() => download('wastage')} onDownloadPdf={() => downloadPdf('wastage')} />
           {wastage.length === 0 ? (
             <div style={emptyStateStyle}>No wastage recorded in this range.</div>
           ) : (
