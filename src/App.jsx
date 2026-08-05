@@ -1,5 +1,5 @@
-import { BrowserRouter, Routes, Route, Navigate, Link } from 'react-router-dom';
-import { AuthProvider, useAuth } from './context/AuthContext';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { AuthProvider } from './context/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import Layout from './components/Layout';
 import Login from './pages/Login';
@@ -17,50 +17,18 @@ import AdminDepartments from './pages/admin/Departments';
 import AdminItems from './pages/admin/Items';
 import AdminUsers from './pages/admin/Users';
 
-// The roster tool has no backend dependency, so it sits outside the login
-// wall entirely. This thin bar is the only chrome it gets (RosterApp itself
-// already renders a full-page layout) — just a way back to the rest of the
-// app, whichever direction is relevant.
-function RosterPublicBar() {
-  const { isAuthenticated } = useAuth();
-  return (
-    <div
-      style={{
-        display: 'flex', justifyContent: 'flex-end', alignItems: 'center',
-        padding: '10px 20px', background: '#fff', borderBottom: '1px solid #e2e8f0',
-      }}
-    >
-      {isAuthenticated ? (
-        <Link to="/inventory" style={{ fontSize: 13, fontWeight: 700, color: '#2563eb', textDecoration: 'none' }}>
-          &larr; Back to Inventory
-        </Link>
-      ) : (
-        <Link to="/login" style={{ fontSize: 13, fontWeight: 700, color: '#2563eb', textDecoration: 'none' }}>
-          Log in for Inventory &rarr;
-        </Link>
-      )}
-    </div>
-  );
-}
-
+// The roster tool moved back behind login: generating/submitting a roster
+// is now role-gated (supervisor/manager/admin) and department-scoped, which
+// requires knowing who's logged in — the earlier "public, no backend
+// dependency" version no longer applies now that rosters are backend-
+// approved data, not just a client-side scheduling toy.
 export default function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
         <Routes>
-          {/* Public — no login required, no backend dependency */}
-          <Route
-            path="/roster"
-            element={
-              <>
-                <RosterPublicBar />
-                <RosterApp />
-              </>
-            }
-          />
           <Route path="/login" element={<Login />} />
 
-          {/* Everything else requires login */}
           <Route
             path="/"
             element={
@@ -70,6 +38,8 @@ export default function App() {
             }
           >
             <Route index element={<Navigate to="/inventory" replace />} />
+
+            <Route path="roster" element={<RosterApp />} />
 
             <Route path="inventory" element={<InventoryDashboard />} />
             <Route path="inventory/requisitions" element={<Requisitions />} />
@@ -86,7 +56,7 @@ export default function App() {
             <Route path="admin/users" element={<AdminUsers />} />
           </Route>
 
-          <Route path="*" element={<Navigate to="/roster" replace />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>

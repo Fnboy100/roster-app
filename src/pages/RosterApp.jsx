@@ -1,5 +1,9 @@
-import { useState, useCallback } from 'react';
-import { INITIAL_STAFF, DEFAULT_RULES, SHIFT_STYLES, WEEKEND_DAYS } from '../data/constants';
+import { useState, useCallback, useEffect } from 'react';
+import { useAuth } from '../context/AuthContext';
+import { apiErrorMessage } from '../api/client';
+import * as rosterApi from '../api/roster';
+import * as departmentsApi from '../api/departments';
+import { DEFAULT_RULES, DAYS, makeCell } from '../data/constants';
 import { generateRoster } from '../utils/generateRoster';
 import { exportCSV } from '../utils/exportCSV';
 import { exportPDF } from '../utils/exportPDF';
@@ -7,19 +11,25 @@ import StatsBar    from '../components/StatsBar';
 import RosterTable from '../components/RosterTable';
 import RulesPanel  from '../components/RulesPanel';
 import AddStaffForm from '../components/AddStaffForm';
+import RosterStatusBadge from '../components/roster/RosterStatusBadge';
+import RosterApprovalPanel from '../components/roster/RosterApprovalPanel';
+import ChangeRequestModal from '../components/roster/ChangeRequestModal';
+import ChangeRequestsList from '../components/roster/ChangeRequestsList';
 
 const btn = (bg, color) => ({
   background: bg, color, border: 'none', borderRadius: 8,
   padding: '8px 15px', fontWeight: 700, fontSize: 13, cursor: 'pointer',
 });
 
-// Computes "Month D – D" (or "Mon D – Mon D" if the week crosses a month
-// boundary) for the Monday–Sunday week containing today. Used only to seed
-// the initial weekLabel — the field stays a free-text input the user can
-// still edit or type over afterward, exactly as before.
-function getCurrentWeekLabel() {
+const GENERATOR_ROLES = ['admin', 'manager', 'supervisor'];
+const APPROVER_ROLES = ['admin', 'manager'];
+
+// Computes { start, end, label } for the Monday–Sunday week containing
+// today. start/end are ISO date strings ("YYYY-MM-DD") for the API; label
+// is the same "Month D – D" display format used throughout.
+function getCurrentWeek() {
   const today = new Date();
-  const dow = today.getDay(); // 0=Sun, 1=Mon, ... 6=Sat
+  const dow = today.getDay();
   const diffToMonday = dow === 0 ? -6 : 1 - dow;
 
   const monday = new Date(today);
@@ -27,136 +37,314 @@ function getCurrentWeekLabel() {
   const sunday = new Date(monday);
   sunday.setDate(monday.getDate() + 6);
 
+  const iso = (d) => d.toISOString().slice(0, 10);
   const startMonth = monday.toLocaleDateString('en-US', { month: 'long' });
   const endMonth = sunday.toLocaleDateString('en-US', { month: 'long' });
+  const label = startMonth === endMonth
+    ? `${startMonth} ${monday.getDate()} \u2013 ${sunday.getDate()}`
+    : `${startMonth.slice(0, 3)} ${monday.getDate()} \u2013 ${endMonth.slice(0, 3)} ${sunday.getDate()}`;
 
-  if (startMonth === endMonth) {
-    return `${startMonth} ${monday.getDate()} \u2013 ${sunday.getDate()}`;
-  }
-  return `${startMonth.slice(0, 3)} ${monday.getDate()} \u2013 ${endMonth.slice(0, 3)} ${sunday.getDate()}`;
+  return { start: iso(monday), end: iso(sunday), label };
+}
+
+// period.entries (RosterEntryOut[]) -> the {staffId: {day: {shift,outlet}}} shape RosterTable/StatsBar expect.
+function entriesToRoster(entries) {
+  const roster = {};
+  entries.forEach((e) => {
+    if (!roster[e.roster_staff_id]) roster[e.roster_staff_id] = {};
+    roster[e.roster_staff_id][e.day] = makeCell(e.shift, e.outlet);
+  });
+  return roster;
+}
+
+// RosterStaffOut[] -> the {id, name, position} shape generateRoster/RosterTable/AddStaffForm expect.
+function staffFromApi(apiStaff) {
+  return apiStaff.map((s) => ({ id: s.id, name: s.full_name, position: s.position }));
 }
 
 export default function RosterApp() {
-  const [staff, setStaff]         = useState(INITIAL_STAFF);
-  const [roster, setRoster]       = useState(() => generateRoster(INITIAL_STAFF, DEFAULT_RULES));
-  const [rules, setRules]         = useState(DEFAULT_RULES);
-  const [editMode, setEditMode]   = useState(false);
+  const { user } = useAuth();
+  const role = user?.role?.name;
+  const isGenerator = GENERATOR_ROLES.includes(role);
+  const isApprover = APPROVER_ROLES.includes(role);
+  const isMultiDept = role === 'admin' || role === 'manager';
+
+  const week = getCurrentWeek();
+
+  const [departments, setDepartments] = useState([]);
+  const [departmentId, setDepartmentId] = useState(undefined);
+  const effectiveDepartmentId = isMultiDept ? departmentId : user?.department?.id;
+
+  const [staff, setStaff] = useState([]);
+  const [rules, setRules] = useState(DEFAULT_RULES);
+  const [roster, setRoster] = useState({});
+  const [period, setPeriod] = useState(null);       // the backend RosterPeriodOut for this dept+week, or null
+  const [isDraft, setIsDraft] = useState(false);     // true = freshly generated locally, not yet submitted
+  const [changeRequests, setChangeRequests] = useState([]);
   const [showRules, setShowRules] = useState(false);
-  const [weekLabel, setWeekLabel] = useState(getCurrentWeekLabel);
-  const [toast, setToast]         = useState('');
+  const [editMode, setEditMode] = useState(false);
+  const [showChangeModal, setShowChangeModal] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
 
-  const showToast = msg => { setToast(msg); setTimeout(() => setToast(''), 2400); };
+  useEffect(() => {
+    if (!isMultiDept) return;
+    departmentsApi.listDepartments({}).then(setDepartments).catch(() => {});
+  }, [isMultiDept]);
 
-  const regenerate = useCallback(() => {
+  const load = useCallback(async () => {
+    if (!effectiveDepartmentId) {
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    setError('');
+    try {
+      const apiStaff = await rosterApi.listRosterStaff({ departmentId: effectiveDepartmentId });
+      setStaff(staffFromApi(apiStaff));
+
+      const periods = await rosterApi.listRosterPeriods({ departmentId: effectiveDepartmentId });
+      const current = periods.find((p) => p.week_start === week.start) || null;
+
+      if (current) {
+        const full = await rosterApi.getRosterPeriod(current.id);
+        setPeriod(full);
+        setRoster(entriesToRoster(full.entries));
+        setIsDraft(false);
+
+        if (full.status === 'approved') {
+          const reqs = await rosterApi.listChangeRequests({ departmentId: effectiveDepartmentId });
+          setChangeRequests(reqs.filter((r) => r.roster_period_id === full.id));
+        } else {
+          setChangeRequests([]);
+        }
+      } else {
+        setPeriod(null);
+        setRoster({});
+        setIsDraft(false);
+        setChangeRequests([]);
+      }
+    } catch (err) {
+      setError(apiErrorMessage(err, 'Could not load the roster.'));
+    } finally {
+      setLoading(false);
+    }
+  }, [effectiveDepartmentId, week.start]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const canGenerate = isGenerator && (!period || period.status === 'rejected' || isDraft);
+  const canSubmit = isGenerator && isDraft;
+  const canRequestChange = isGenerator && period?.status === 'approved' && !isDraft;
+
+  const handleGenerate = () => {
+    if (staff.length === 0) {
+      setError('Add at least one staff member before generating a roster.');
+      return;
+    }
+    setError('');
     setRoster(generateRoster(staff, rules));
-    showToast('Roster generated!');
-  }, [staff, rules]);
-
-  const updateCell = (staffId, day, value) => {
-    setRoster(prev => ({ ...prev, [staffId]: { ...prev[staffId], [day]: value } }));
+    setIsDraft(true);
+    setNotice('');
   };
 
-  const addStaff = (member, defaultRow) => {
-    setStaff(prev => [...prev, member]);
-    setRoster(prev => ({ ...prev, [member.id]: defaultRow }));
-    showToast(`${member.name} added!`);
+  const handleSubmit = async () => {
+    setError('');
+    const entries = [];
+    staff.forEach((s) => {
+      DAYS.forEach((day) => {
+        const cell = roster[s.id]?.[day] || makeCell('Off', 'none');
+        entries.push({ roster_staff_id: s.id, day, shift: cell.shift, outlet: cell.outlet });
+      });
+    });
+    try {
+      const submitted = await rosterApi.submitRoster({
+        department_id: isMultiDept ? effectiveDepartmentId : undefined,
+        week_start: week.start,
+        week_end: week.end,
+        week_label: week.label,
+        rules_snapshot: rules,
+        entries,
+      });
+      setPeriod(submitted);
+      setIsDraft(false);
+      setNotice('Roster submitted — awaiting manager approval.');
+    } catch (err) {
+      setError(apiErrorMessage(err, 'Could not submit the roster.'));
+    }
   };
 
-  const removeStaff = id => {
-    setStaff(prev => prev.filter(s => s.id !== id));
-    setRoster(prev => { const n = { ...prev }; delete n[id]; return n; });
+  const handleAddStaff = async (member) => {
+    setError('');
+    try {
+      await rosterApi.createRosterStaff({
+        department_id: isMultiDept ? effectiveDepartmentId : undefined,
+        full_name: member.name,
+        position: member.position,
+      });
+      const apiStaff = await rosterApi.listRosterStaff({ departmentId: effectiveDepartmentId });
+      setStaff(staffFromApi(apiStaff));
+    } catch (err) {
+      setError(apiErrorMessage(err, 'Could not add this staff member.'));
+    }
   };
 
-  const handleExport = () => {
-    exportCSV(staff, roster, weekLabel);
-    showToast('CSV exported!');
+  const handleCellChange = (staffId, day, value) => {
+    if (!isDraft) return; // protocol enforcement: no direct edits outside of a local, unsubmitted draft
+    setRoster((prev) => ({ ...prev, [staffId]: { ...prev[staffId], [day]: value } }));
   };
 
-  const handleExportPDF = () => {
-    exportPDF(staff, roster, weekLabel);
-    showToast('PDF exported!');
-  };
+  if (!effectiveDepartmentId && !isMultiDept) {
+    return (
+      <div style={{ maxWidth: 900, margin: '40px auto', padding: 20, textAlign: 'center', color: '#64748b' }}>
+        Your account has no department assigned, so there's no roster to show. Contact an admin.
+      </div>
+    );
+  }
 
   return (
-    <div style={{ minHeight: '100vh', background: '#f8fafc', padding: '24px 16px' }}>
+    <div style={{ maxWidth: 1100, margin: '0 auto', padding: '24px 16px 60px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12, marginBottom: 6 }}>
+        <div>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 2, color: '#94a3b8', textTransform: 'uppercase', marginBottom: 2 }}>
+            Auto Roster Generator
+          </div>
+          <h1 style={{ fontSize: 24, fontWeight: 800, color: '#0f172a', margin: 0 }}>
+            Shift Roster {isMultiDept && departments.find((d) => d.id === effectiveDepartmentId) ? `— ${departments.find((d) => d.id === effectiveDepartmentId).name}` : ''}
+          </h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 6 }}>
+            <span style={{ fontSize: 13, color: '#64748b', fontWeight: 600 }}>{week.label}</span>
+            {period && !isDraft && <RosterStatusBadge status={period.status} />}
+            {isDraft && <RosterStatusBadge status="draft" />}
+          </div>
+        </div>
 
-      {/* Toast */}
-      {toast && (
-        <div style={{
-          position: 'fixed', top: 20, right: 20, zIndex: 999,
-          background: '#0f172a', color: '#fff',
-          padding: '10px 20px', borderRadius: 10, fontWeight: 600, fontSize: 14,
-          boxShadow: '0 4px 20px rgba(0,0,0,0.25)',
-        }}>{toast}</div>
+        {isMultiDept && (
+          <select
+            value={departmentId ?? ''}
+            onChange={(e) => setDepartmentId(e.target.value ? Number(e.target.value) : undefined)}
+            style={{ padding: '8px 12px', borderRadius: 8, border: '1.5px solid #e2e8f0', fontSize: 13, fontWeight: 600 }}
+          >
+            <option value="">Select a department…</option>
+            {departments.map((d) => (
+              <option key={d.id} value={d.id}>{d.name}</option>
+            ))}
+          </select>
+        )}
+      </div>
+
+      {!isGenerator && (
+        <div style={{ background: '#eff6ff', border: '1.5px solid #bfdbfe', color: '#1d4ed8', borderRadius: 10, padding: '10px 14px', fontSize: 13, margin: '14px 0' }}>
+          View only — only supervisors and managers can generate or change a roster.
+        </div>
+      )}
+      {error && (
+        <div style={{ background: '#fef2f2', border: '1.5px solid #fecaca', color: '#b91c1c', borderRadius: 10, padding: '10px 14px', fontSize: 13, margin: '14px 0' }}>
+          {error}
+        </div>
+      )}
+      {notice && (
+        <div style={{ background: '#f0fdf4', border: '1.5px solid #bbf7d0', color: '#15803d', borderRadius: 10, padding: '10px 14px', fontSize: 13, margin: '14px 0' }}>
+          {notice}
+        </div>
       )}
 
-      <div style={{ maxWidth: 1140, margin: '0 auto' }}>
+      {loading ? (
+        <div style={{ color: '#94a3b8', fontSize: 14, padding: '30px 0' }}>Loading…</div>
+      ) : !effectiveDepartmentId ? (
+        <div style={{ color: '#94a3b8', fontSize: 14, padding: '30px 0' }}>Select a department to view its roster.</div>
+      ) : (
+        <>
+          {period?.status === 'pending_approval' && isApprover && (
+            <RosterApprovalPanel period={period} onDecided={(updated) => { setPeriod(updated); setRoster(entriesToRoster(updated.entries)); }} />
+          )}
 
-        {/* ── Header ── */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 8 }}>
-          <div>
-            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 2, color: '#94a3b8', textTransform: 'uppercase', marginBottom: 2 }}>
-              Auto Roster Generator
+          {period?.status === 'rejected' && (
+            <div style={{ background: '#fef2f2', border: '1.5px solid #fecaca', borderRadius: 10, padding: '10px 14px', fontSize: 13, marginBottom: 14, color: '#b91c1c' }}>
+              This roster was rejected{period.decided_by ? ` by ${period.decided_by.full_name}` : ''}
+              {period.decision_comment ? `: "${period.decision_comment}"` : '.'} Generate a new one to resubmit.
             </div>
-            <h1 style={{ fontSize: 26, fontWeight: 800, color: '#0f172a', marginBottom: 4 }}>Shift Roster - Bar Team</h1>
-            <p style={{ fontSize: 12, color: '#64748b' }}>
-              🔒 No Off on <strong>Fri · Sat · Sun</strong> &nbsp;·&nbsp;
-              No PM→AM back-to-back &nbsp;·&nbsp;
-              Min 1 AM + 1 PM per position/day
-            </p>
+          )}
+
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 18 }}>
+            {canGenerate && <button onClick={handleGenerate} style={btn('#0f172a', '#fff')}>&#8635; Generate</button>}
+            {canSubmit && <button onClick={handleSubmit} style={btn('#16a34a', '#fff')}>Submit for Approval</button>}
+            {isGenerator && (
+              <button onClick={() => setShowRules((v) => !v)} style={btn('#f1f5f9', '#334155')}>&#9881; Rules</button>
+            )}
+            {isDraft && (
+              <button onClick={() => setEditMode((v) => !v)} style={btn(editMode ? '#0f172a' : '#f1f5f9', editMode ? '#fff' : '#334155')}>
+                {editMode ? 'Done Editing' : '\u2212 Edit'}
+              </button>
+            )}
+            {canRequestChange && (
+              <button onClick={() => setShowChangeModal(true)} style={btn('#f1f5f9', '#334155')}>Request Change</button>
+            )}
+            {period?.status === 'approved' && !isDraft && (
+              <>
+                <button onClick={() => exportCSV(staff, roster, week.label)} style={btn('#16a34a', '#fff')}>&#8595; CSV</button>
+                <button onClick={() => exportPDF(staff, roster, week.label)} style={btn('#dc2626', '#fff')}>&#8595; PDF</button>
+              </>
+            )}
           </div>
 
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-            <input
-              value={weekLabel}
-              onChange={e => setWeekLabel(e.target.value)}
-              style={{ padding: '7px 12px', borderRadius: 8, border: '1.5px solid #e2e8f0', fontSize: 13, fontWeight: 600, color: '#334155', width: 158 }}
-            />
-            <button onClick={() => setShowRules(v => !v)} style={btn('#f1f5f9', '#334155')}>⚙ Rules</button>
-            <button onClick={() => setEditMode(v => !v)} style={btn(editMode ? '#dbeafe' : '#f1f5f9', editMode ? '#1e3a8a' : '#334155')}>
-              {editMode ? '✓ Done' : '✏ Edit'}
-            </button>
-            <button onClick={regenerate}    style={btn('#0f172a', '#fff')}>⟳ Generate</button>
-            <button onClick={handleExport}  style={btn('#16a34a', '#fff')}>↓ CSV</button>
-            <button onClick={handleExportPDF}  style={btn('#dc2626', '#fff')}>↓ PDF</button>
-          </div>
-        </div>
+          {showRules && isGenerator && (
+            <RulesPanel rules={rules} onChange={setRules} />
+          )}
 
-        {/* ── Legend ── */}
-        <div style={{ display: 'flex', gap: 10, margin: '10px 0 14px', flexWrap: 'wrap', alignItems: 'center' }}>
-          {Object.entries(SHIFT_STYLES).map(([k, v]) => (
-            <span key={k} style={{ padding: '2px 12px', borderRadius: 20, fontSize: 12, fontWeight: 700, background: v.bg, color: v.text, border: `1.5px solid ${v.border}` }}>
-              {k === 'AM' ? 'AM · 11am–6pm' : k === 'PM' ? 'PM · 4pm–12am' : 'Off'}
-            </span>
-          ))}
-          <span style={{ fontSize: 12, color: '#e11d48', fontWeight: 600, background: '#fff1f2', border: '1.5px solid #fda4af', borderRadius: 20, padding: '2px 12px' }}>
-            🔒 Fri · Sat · Sun = No Off
-          </span>
-        </div>
+          {isGenerator && canGenerate && (
+            <AddStaffForm onAdd={handleAddStaff} />
+          )}
 
-        {/* ── Rules panel ── */}
-        {showRules && <RulesPanel rules={rules} onChange={setRules} />}
+          {staff.length === 0 ? (
+            <div style={{ color: '#94a3b8', fontSize: 14, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, padding: 30, textAlign: 'center' }}>
+              No staff on this roster yet.{isGenerator ? ' Add staff, then Generate.' : ''}
+            </div>
+          ) : (
+            <>
+              <StatsBar staff={staff} roster={roster} />
+              <RosterTable
+                staff={staff}
+                roster={roster}
+                rules={rules}
+                editMode={editMode && isDraft}
+                onCellChange={handleCellChange}
+                onRemove={() => {}}
+              />
+            </>
+          )}
 
-        {/* ── Stats ── */}
-        <StatsBar staff={staff} roster={roster} />
+          {period && period.status === 'approved' && (
+            <div style={{ marginTop: 28 }}>
+              <h2 style={{ fontSize: 15, fontWeight: 800, color: '#0f172a', marginBottom: 10 }}>Change Requests</h2>
+              <ChangeRequestsList
+                requests={changeRequests}
+                canDecide={isApprover}
+                onDecided={(updated) => {
+                  setChangeRequests((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
+                  if (updated.status === 'approved') load();
+                }}
+              />
+            </div>
+          )}
+        </>
+      )}
 
-        {/* ── Table ── */}
-        <RosterTable
-          staff={staff}
-          roster={roster}
-          rules={rules}
-          editMode={editMode}
-          onCellChange={updateCell}
-          onRemove={removeStaff}
+      {showChangeModal && period && (
+        <ChangeRequestModal
+          period={period}
+          entries={period.entries}
+          onClose={() => setShowChangeModal(false)}
+          onCreated={(created) => {
+            setChangeRequests((prev) => [created, ...prev]);
+            setShowChangeModal(false);
+            setNotice('Change request sent to the manager for approval.');
+          }}
         />
-
-        {/* ── Add staff ── */}
-        <AddStaffForm onAdd={addStaff} />
-
-        <p style={{ fontSize: 12, color: '#94a3b8', textAlign: 'center', paddingBottom: 16 }}>
-          Constraint-based scheduling · AM = 11am–6pm · PM = 4pm–12am · Fri/Sat/Sun = all hands on deck
-        </p>
-      </div>
+      )}
     </div>
   );
 }
