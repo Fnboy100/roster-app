@@ -3,7 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { apiErrorMessage } from '../api/client';
 import * as rosterApi from '../api/roster';
 import * as departmentsApi from '../api/departments';
-import { DEFAULT_RULES, DAYS, makeCell } from '../data/constants';
+import { DEFAULT_RULES, DAYS, makeCell, positionsForDepartment } from '../data/constants';
 import { generateRoster } from '../utils/generateRoster';
 import { exportCSV } from '../utils/exportCSV';
 import { exportPDF } from '../utils/exportPDF';
@@ -67,13 +67,17 @@ export default function RosterApp() {
   const role = user?.role?.name;
   const isGenerator = GENERATOR_ROLES.includes(role);
   const isApprover = APPROVER_ROLES.includes(role);
-  const isMultiDept = role === 'admin' || role === 'manager';
+  const isMultiDept = role === 'admin';
 
   const week = getCurrentWeek();
 
   const [departments, setDepartments] = useState([]);
   const [departmentId, setDepartmentId] = useState(undefined);
   const effectiveDepartmentId = isMultiDept ? departmentId : user?.department?.id;
+  const currentDepartmentCode = isMultiDept
+    ? departments.find((d) => d.id === effectiveDepartmentId)?.code
+    : user?.department?.code;
+  const availablePositions = positionsForDepartment(currentDepartmentCode);
 
   const [staff, setStaff] = useState([]);
   const [rules, setRules] = useState(DEFAULT_RULES);
@@ -296,7 +300,7 @@ export default function RosterApp() {
           )}
 
           {isGenerator && canGenerate && (
-            <AddStaffForm onAdd={handleAddStaff} />
+            <AddStaffForm onAdd={handleAddStaff} positions={availablePositions} />
           )}
 
           {staff.length === 0 ? (

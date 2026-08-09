@@ -30,3 +30,9 @@ export async function registerUser(payload) {
   const { data } = await client.post('/auth/register', payload);
   return data;
 }
+
+/** POST /auth/change-password -> UserOut. payload: { current_password, new_password } */
+export async function changePassword(payload) {
+  const { data } = await client.post('/auth/change-password', payload);
+  return data;
+}

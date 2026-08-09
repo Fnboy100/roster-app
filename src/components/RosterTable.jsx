@@ -1,8 +1,22 @@
 import ShiftBadge from './ShiftBadge';
-import { DAYS, WEEKEND_DAYS, POSITION_COLORS, POSITIONS, makeCell } from '../data/constants';
+import { DAYS, WEEKEND_DAYS, POSITION_COLORS, DEPARTMENT_POSITIONS, makeCell } from '../data/constants';
+
+// Canonical ordering across every department's position list, so groups
+// render in a sensible order no matter which department's staff are being
+// shown. A position that isn't in any known department list still renders
+// (just grouped after the known ones) instead of being silently dropped —
+// which is what happened before this was derived from the actual staff
+// present instead of one hardcoded (Bar-only) position list.
+const ALL_KNOWN_POSITIONS = Object.values(DEPARTMENT_POSITIONS).flat();
+const FALLBACK_POSITION_COLOR = { bg: '#f8fafc', border: '#94a3b8', text: '#334155' };
 
 export default function RosterTable({ staff, roster, rules, editMode, onCellChange, onRemove }) {
-  const grouped = POSITIONS
+  const presentPositions = [...new Set(staff.map(s => s.position))];
+  const orderedPositions = [
+    ...ALL_KNOWN_POSITIONS.filter(p => presentPositions.includes(p)),
+    ...presentPositions.filter(p => !ALL_KNOWN_POSITIONS.includes(p)),
+  ];
+  const grouped = orderedPositions
     .map(pos => ({ pos, members: staff.filter(s => s.position === pos) }))
     .filter(g => g.members.length > 0);
 
@@ -33,7 +47,7 @@ export default function RosterTable({ staff, roster, rules, editMode, onCellChan
         </thead>
         <tbody>
           {grouped.map(({ pos, members }) => {
-            const pc = POSITION_COLORS[pos];
+            const pc = POSITION_COLORS[pos] || FALLBACK_POSITION_COLOR;
             return members.map((s, idx) => (
               <tr key={s.id} style={{ background: idx % 2 === 0 ? pc.bg : '#fff' }}>
                 {/* Name cell */}

@@ -1,4 +1,4 @@
-import { NavLink, Outlet } from 'react-router-dom';
+import { NavLink, Outlet, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { ROLE_LABELS, ROLES } from '../api/roles';
 import NotificationBell from './NotificationBell';
@@ -61,14 +61,18 @@ export default function Layout() {
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <NotificationBell />
-          <div style={{ textAlign: 'right', lineHeight: 1.3 }}>
+          <Link
+            to="/account/password"
+            title="Change password"
+            style={{ textAlign: 'right', lineHeight: 1.3, textDecoration: 'none', cursor: 'pointer' }}
+          >
             <div style={{ fontSize: 13, fontWeight: 700, color: '#0f172a' }}>{user?.full_name}</div>
             <div style={{ fontSize: 11, color: '#94a3b8' }}>
               {ROLE_LABELS[user?.role?.name] || user?.role?.name}
               {user?.department ? ` · ${user.department.name}` : ''}
               {user?.outlet ? ` · ${user.outlet.name}` : ''}
             </div>
-          </div>
+          </Link>
           <button
             onClick={logout}
             style={{

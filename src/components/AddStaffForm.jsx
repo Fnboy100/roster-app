@@ -1,16 +1,23 @@
-import { useState } from 'react';
-import { POSITIONS, WEEKEND_DAYS, DAYS, makeCell } from '../data/constants';
+import { useState, useEffect } from 'react';
+import { POSITIONS, POSITION_COLORS, WEEKEND_DAYS, DAYS, makeCell } from '../data/constants';
 
-export default function AddStaffForm({ onAdd }) {
+export default function AddStaffForm({ onAdd, positions = POSITIONS }) {
   const [name, setName] = useState('');
-  const [pos, setPos]   = useState('Bartender');
+  const [pos, setPos]   = useState(positions[0]);
+
+  // If the available positions change (e.g. switching department), make
+  // sure the selected one is still valid instead of silently keeping a
+  // stale value from a different department's list.
+  useEffect(() => {
+    if (!positions.includes(pos)) setPos(positions[0]);
+  }, [positions]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const inp = { padding: '7px 10px', borderRadius: 8, border: '1.5px solid #e2e8f0', fontSize: 13, color: '#0f172a' };
 
   const handleAdd = () => {
     if (!name.trim()) return;
-    const colMap = { Supervisor: '#f59e42', Bartender: '#38bdf8', Barback: '#a78bfa' };
-    const member = { id: Date.now(), name: name.trim(), position: pos, color: colMap[pos] };
+    const color = POSITION_COLORS[pos]?.border || '#94a3b8';
+    const member = { id: Date.now(), name: name.trim(), position: pos, color };
     // Default: Off on weekdays, AM on weekends
     const row = {};
     DAYS.forEach(d => { row[d] = makeCell(WEEKEND_DAYS.includes(d) ? 'AM' : 'Off', 'none'); });
@@ -29,8 +36,8 @@ export default function AddStaffForm({ onAdd }) {
           onKeyDown={e => e.key === 'Enter' && handleAdd()}
           style={{ ...inp, width: 190 }}
         />
-        <select value={pos} onChange={e => setPos(e.target.value)} style={{ ...inp, width: 145 }}>
-          {POSITIONS.map(p => <option key={p}>{p}</option>)}
+        <select value={pos} onChange={e => setPos(e.target.value)} style={{ ...inp, width: 175 }}>
+          {positions.map(p => <option key={p}>{p}</option>)}
         </select>
         <button onClick={handleAdd} style={{
           background: '#0f172a', color: '#fff', border: 'none',

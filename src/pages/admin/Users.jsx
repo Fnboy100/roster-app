@@ -1,15 +1,17 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useAuth } from '../../context/AuthContext';
 import { apiErrorMessage } from '../../api/client';
 import { ROLES, ROLE_LABELS } from '../../api/roles';
 import * as usersApi from '../../api/users';
 import * as outletsApi from '../../api/outlets';
 import * as departmentsApi from '../../api/departments';
 import * as authApi from '../../api/auth';
-import { pageStyle, cardStyle, btn, inputStyle, labelStyle, selectStyle, errorBoxStyle, emptyStateStyle } from '../../components/inventory/ui';
+import { pageStyle, cardStyle, btn, inputStyle, labelStyle, selectStyle, errorBoxStyle, emptyStateStyle, Badge } from '../../components/inventory/ui';
 
 const emptyForm = { full_name: '', email: '', password: '', role_name: '', department_id: '', outlet_id: '' };
 
 export default function AdminUsers() {
+  const { user: me } = useAuth();
   const [users, setUsers] = useState([]);
   const [outlets, setOutlets] = useState([]);
   const [departments, setDepartments] = useState([]);
@@ -18,6 +20,8 @@ export default function AdminUsers() {
   const [formError, setFormError] = useState('');
   const [success, setSuccess] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [rowError, setRowError] = useState({});
+  const [busyRowId, setBusyRowId] = useState(null);
 
   const load = useCallback(async () => {
     try {
@@ -65,6 +69,45 @@ export default function AdminUsers() {
     }
   };
 
+  const handleDepartmentChange = async (userId, departmentId) => {
+    setBusyRowId(userId);
+    setRowError((prev) => ({ ...prev, [userId]: '' }));
+    try {
+      const updated = await usersApi.updateUser(userId, { department_id: departmentId ? Number(departmentId) : null });
+      setUsers((prev) => prev.map((u) => (u.id === userId ? updated : u)));
+    } catch (err) {
+      setRowError((prev) => ({ ...prev, [userId]: apiErrorMessage(err, 'Could not update this user.') }));
+    } finally {
+      setBusyRowId(null);
+    }
+  };
+
+  const handleDeactivate = async (userId) => {
+    setBusyRowId(userId);
+    setRowError((prev) => ({ ...prev, [userId]: '' }));
+    try {
+      const updated = await usersApi.deactivateUser(userId);
+      setUsers((prev) => prev.map((u) => (u.id === userId ? updated : u)));
+    } catch (err) {
+      setRowError((prev) => ({ ...prev, [userId]: apiErrorMessage(err, 'Could not deactivate this user.') }));
+    } finally {
+      setBusyRowId(null);
+    }
+  };
+
+  const handleReactivate = async (userId) => {
+    setBusyRowId(userId);
+    setRowError((prev) => ({ ...prev, [userId]: '' }));
+    try {
+      const updated = await usersApi.reactivateUser(userId);
+      setUsers((prev) => prev.map((u) => (u.id === userId ? updated : u)));
+    } catch (err) {
+      setRowError((prev) => ({ ...prev, [userId]: apiErrorMessage(err, 'Could not reactivate this user.') }));
+    } finally {
+      setBusyRowId(null);
+    }
+  };
+
   return (
     <div style={pageStyle}>
       <div style={{ marginBottom: 20 }}>
@@ -88,6 +131,7 @@ export default function AdminUsers() {
         <div style={{ marginBottom: 12 }}>
           <label style={labelStyle}>Password</label>
           <input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} style={{ ...inputStyle, width: '100%' }} minLength={8} required />
+          <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>Just a starting password — the person can change it themselves from their account menu once they log in.</div>
         </div>
         <div style={{ marginBottom: 12 }}>
           <label style={labelStyle}>Role</label>
@@ -99,6 +143,11 @@ export default function AdminUsers() {
               </option>
             ))}
           </select>
+          {form.role_name === ROLES.MANAGER && (
+            <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>
+              Managers are scoped to one department — pick the department below, or they won't be able to see or approve anything until you do.
+            </div>
+          )}
         </div>
 
         {isOutletManager ? (
@@ -115,7 +164,7 @@ export default function AdminUsers() {
           </div>
         ) : (
           <div style={{ marginBottom: 16 }}>
-            <label style={labelStyle}>Department (optional)</label>
+            <label style={labelStyle}>Department{form.role_name === ROLES.MANAGER ? '' : ' (optional)'}</label>
             <select value={form.department_id} onChange={(e) => setForm({ ...form, department_id: e.target.value })} style={{ ...selectStyle, width: '100%' }}>
               <option value="">None</option>
               {departments.map((d) => (
@@ -138,15 +187,65 @@ export default function AdminUsers() {
       ) : (
         <div style={{ ...cardStyle, overflow: 'hidden' }}>
           {users.map((u, i) => (
-            <div key={u.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 16px', borderTop: i === 0 ? 'none' : '1px solid #f8fafc', fontSize: 13 }}>
-              <div>
-                <div style={{ fontWeight: 700, color: '#0f172a' }}>{u.full_name}</div>
-                <div style={{ fontSize: 12, color: '#94a3b8' }}>{u.email}</div>
+            <div key={u.id} style={{ padding: '12px 16px', borderTop: i === 0 ? 'none' : '1px solid #f8fafc' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap' }}>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontWeight: 700, color: '#0f172a', fontSize: 13 }}>{u.full_name}</span>
+                    {!u.is_active && <Badge tone="red">Deactivated</Badge>}
+                  </div>
+                  <div style={{ fontSize: 12, color: '#94a3b8' }}>{u.email}</div>
+                </div>
+
+                <div style={{ textAlign: 'right', fontSize: 12, color: '#64748b' }}>
+                  <div>{ROLE_LABELS[u.role?.name] || u.role?.name}</div>
+                  <div>{u.outlet?.name || '—'}</div>
+                </div>
               </div>
-              <div style={{ textAlign: 'right', fontSize: 12, color: '#64748b' }}>
-                <div>{ROLE_LABELS[u.role?.name] || u.role?.name}</div>
-                <div>{u.department?.name || u.outlet?.name || '—'}</div>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 10, flexWrap: 'wrap', gap: 8 }}>
+                {u.role?.name !== ROLES.OUTLET_MANAGER ? (
+                  <select
+                    value={u.department?.id ?? ''}
+                    onChange={(e) => handleDepartmentChange(u.id, e.target.value)}
+                    disabled={busyRowId === u.id}
+                    style={{ ...selectStyle, fontSize: 12, padding: '5px 10px' }}
+                  >
+                    <option value="">No department</option>
+                    {departments.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.name}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <span />
+                )}
+
+                {u.id === me?.id ? (
+                  <span style={{ fontSize: 11, color: '#94a3b8' }}>This is you</span>
+                ) : u.is_active ? (
+                  <button
+                    onClick={() => handleDeactivate(u.id)}
+                    disabled={busyRowId === u.id}
+                    style={{ ...btn('#fef2f2', '#b91c1c'), padding: '5px 12px', fontSize: 12 }}
+                  >
+                    Deactivate
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => handleReactivate(u.id)}
+                    disabled={busyRowId === u.id}
+                    style={{ ...btn('#f0fdf4', '#15803d'), padding: '5px 12px', fontSize: 12 }}
+                  >
+                    Reactivate
+                  </button>
+                )}
               </div>
+
+              {rowError[u.id] && (
+                <div style={{ marginTop: 8, fontSize: 12, color: '#b91c1c' }}>{rowError[u.id]}</div>
+              )}
             </div>
           ))}
         </div>

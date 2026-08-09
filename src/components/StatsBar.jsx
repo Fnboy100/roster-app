@@ -2,6 +2,8 @@
 
 import { DAYS, POSITION_COLORS } from '../data/constants';
 
+const FALLBACK_POSITION_COLOR = { bg: '#f8fafc', border: '#94a3b8', text: '#334155' };
+
 export default function StatsBar({ staff, roster }) {
   return (
     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 18 }}>
@@ -12,7 +14,7 @@ export default function StatsBar({ staff, roster }) {
         // Count outlet appearances
         const tCount   = DAYS.filter(d => roster[s.id]?.[d]?.outlet === 'T').length;
         const rstCount = DAYS.filter(d => roster[s.id]?.[d]?.outlet === 'RST').length;
-        const pc = POSITION_COLORS[s.position];
+        const pc = POSITION_COLORS[s.position] || FALLBACK_POSITION_COLOR;
         return (
           <div key={s.id} style={{
             background: pc.bg, border: `1.5px solid ${pc.border}`,

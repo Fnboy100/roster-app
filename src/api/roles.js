@@ -18,9 +18,10 @@ export const ROLE_LABELS = {
   [ROLES.STAFF]: 'Staff',
 };
 
-// Roles that see across every department without being pinned to one
-// (matches app/services/access_scope.py's admin/manager/outlet_manager/
-// storekeeper branches — outlet_manager and storekeeper are outlet-wide,
-// not truly global, but the frontend just needs to know "this role gets a
-// department picker instead of a fixed department").
-export const MULTI_DEPARTMENT_ROLES = [ROLES.ADMIN, ROLES.MANAGER, ROLES.OUTLET_MANAGER, ROLES.STOREKEEPER];
+// Roles that see across more than one department without being pinned to
+// one (matches app/services/access_scope.py: admin is fully unrestricted;
+// outlet_manager/storekeeper are outlet-wide, not truly global. manager is
+// deliberately NOT in this list — it used to be treated as HQ-wide/
+// unrestricted, but that was reversed so a manager only sees and acts on
+// their own single department, same as supervisor).
+export const MULTI_DEPARTMENT_ROLES = [ROLES.ADMIN, ROLES.OUTLET_MANAGER, ROLES.STOREKEEPER];

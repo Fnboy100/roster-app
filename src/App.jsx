@@ -3,6 +3,7 @@ import { AuthProvider } from './context/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import Layout from './components/Layout';
 import Login from './pages/Login';
+import ChangePassword from './pages/ChangePassword';
 import RosterApp from './pages/RosterApp';
 import InventoryDashboard from './pages/InventoryDashboard';
 import Requisitions from './pages/Requisitions';
@@ -40,6 +41,7 @@ export default function App() {
             <Route index element={<Navigate to="/inventory" replace />} />
 
             <Route path="roster" element={<RosterApp />} />
+            <Route path="account/password" element={<ChangePassword />} />
 
             <Route path="inventory" element={<InventoryDashboard />} />
             <Route path="inventory/requisitions" element={<Requisitions />} />
