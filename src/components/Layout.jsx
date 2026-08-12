@@ -26,7 +26,7 @@ const NAV_ITEMS = [
   { to: '/admin/outlets', label: 'Outlets', roles: [ROLES.ADMIN] },
   { to: '/admin/departments', label: 'Departments', roles: [ROLES.ADMIN] },
   { to: '/admin/items', label: 'Items', roles: [ROLES.ADMIN, ROLES.MANAGER, ROLES.OUTLET_MANAGER, ROLES.STOREKEEPER] },
-  { to: '/admin/users', label: 'Users', roles: [ROLES.ADMIN] },
+  { to: '/admin/users', label: 'Users', roles: [ROLES.ADMIN, ROLES.MANAGER] },
 ];
 
 export default function Layout() {

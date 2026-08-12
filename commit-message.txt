@@ -1,8 +1,18 @@
-feat(frontend): improve user management, roster roles, and department access UI
+fix(frontend): mobile notification overflow, roster week navigation, users nav gating
 
-- Allow authenticated users to change their own passwords
-- Add user deletion controls for master admins and managers
-- Extend roster staff job-role selection across bar, floor, kitchen, and steward departments
-- Add department-specific role/design patterns for roster generation
-- Restrict manager roster and inventory actions to their assigned department
-- Hide unauthorized department rosters and inventory actions from managers
+- NotificationBell.jsx: dropdown now anchored to the viewport
+  (position: fixed, right/top) instead of the bell's own position, with
+  width: min(320px, calc(100vw - 24px)) and a matching max-height cap —
+  was overflowing off-screen on narrow/cramped mobile headers.
+
+- RosterApp.jsx: week is no longer hardcoded to "this week". Generalized
+  getCurrentWeek() -> getWeek(offsetWeeks) and added weekOffset state with
+  prev/next/this-week navigation, so a supervisor can move to a future
+  week to generate next week's roster instead of being stuck once the
+  current week is approved (Generate was correctly hidden for an approved
+  period, but there was no way to reach a different, ungenerated week).
+
+- Layout.jsx: "Users" nav link was still roles: [admin] from before
+  manager was granted user-management access on the backend — manager
+  couldn't see the page (or the deactivate button on it, which was
+  already correctly implemented) at all. Added ROLES.MANAGER.

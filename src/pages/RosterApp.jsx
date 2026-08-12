@@ -24,16 +24,17 @@ const btn = (bg, color) => ({
 const GENERATOR_ROLES = ['admin', 'manager', 'supervisor'];
 const APPROVER_ROLES = ['admin', 'manager'];
 
-// Computes { start, end, label } for the Monday–Sunday week containing
-// today. start/end are ISO date strings ("YYYY-MM-DD") for the API; label
-// is the same "Month D – D" display format used throughout.
-function getCurrentWeek() {
+// Computes { start, end, label } for the Monday–Sunday week `offsetWeeks`
+// away from the week containing today (0 = this week, 1 = next week, -1 =
+// last week, ...). start/end are ISO date strings ("YYYY-MM-DD") for the
+// API; label is the "Month D – D" display format used throughout.
+function getWeek(offsetWeeks) {
   const today = new Date();
   const dow = today.getDay();
   const diffToMonday = dow === 0 ? -6 : 1 - dow;
 
   const monday = new Date(today);
-  monday.setDate(today.getDate() + diffToMonday);
+  monday.setDate(today.getDate() + diffToMonday + offsetWeeks * 7);
   const sunday = new Date(monday);
   sunday.setDate(monday.getDate() + 6);
 
@@ -69,7 +70,8 @@ export default function RosterApp() {
   const isApprover = APPROVER_ROLES.includes(role);
   const isMultiDept = role === 'admin';
 
-  const week = getCurrentWeek();
+  const [weekOffset, setWeekOffset] = useState(0); // 0 = this week, 1 = next week, -1 = last week
+  const week = getWeek(weekOffset);
 
   const [departments, setDepartments] = useState([]);
   const [departmentId, setDepartmentId] = useState(undefined);
@@ -219,8 +221,31 @@ export default function RosterApp() {
           <h1 style={{ fontSize: 24, fontWeight: 800, color: '#0f172a', margin: 0 }}>
             Shift Roster {isMultiDept && departments.find((d) => d.id === effectiveDepartmentId) ? `— ${departments.find((d) => d.id === effectiveDepartmentId).name}` : ''}
           </h1>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 6 }}>
-            <span style={{ fontSize: 13, color: '#64748b', fontWeight: 600 }}>{week.label}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 6, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <button
+                onClick={() => setWeekOffset((o) => o - 1)}
+                title="Previous week"
+                style={{ ...btn('#f1f5f9', '#334155'), padding: '4px 9px', fontSize: 13 }}
+              >
+                &#8249;
+              </button>
+              <span style={{ fontSize: 13, color: '#64748b', fontWeight: 600, minWidth: 120, textAlign: 'center' }}>
+                {week.label}
+              </span>
+              <button
+                onClick={() => setWeekOffset((o) => o + 1)}
+                title="Next week"
+                style={{ ...btn('#f1f5f9', '#334155'), padding: '4px 9px', fontSize: 13 }}
+              >
+                &#8250;
+              </button>
+              {weekOffset !== 0 && (
+                <button onClick={() => setWeekOffset(0)} style={{ ...btn('transparent', '#2563eb'), padding: '4px 8px', fontSize: 12 }}>
+                  This week
+                </button>
+              )}
+            </div>
             {period && !isDraft && <RosterStatusBadge status={period.status} />}
             {isDraft && <RosterStatusBadge status="draft" />}
           </div>

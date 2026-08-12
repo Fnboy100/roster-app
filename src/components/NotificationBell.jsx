@@ -58,11 +58,11 @@ export default function NotificationBell() {
       {open && (
         <div
           style={{
-            position: 'absolute',
-            right: 0,
-            top: 42,
-            width: 320,
-            maxHeight: 420,
+            position: 'fixed',
+            top: 64,
+            right: 12,
+            width: 'min(320px, calc(100vw - 24px))',
+            maxHeight: 'min(420px, calc(100vh - 96px))',
             overflowY: 'auto',
             background: '#fff',
             borderRadius: 12,
