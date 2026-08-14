@@ -36,3 +36,15 @@ export async function changePassword(payload) {
   const { data } = await client.post('/auth/change-password', payload);
   return data;
 }
+
+/** POST /auth/forgot-password -> { message }. Always returns a generic success message. payload: { email } */
+export async function forgotPassword(email) {
+  const { data } = await client.post('/auth/forgot-password', { email });
+  return data;
+}
+
+/** POST /auth/reset-password -> { message }. payload: { email, code, new_password } */
+export async function resetPassword({ email, code, newPassword }) {
+  const { data } = await client.post('/auth/reset-password', { email, code, new_password: newPassword });
+  return data;
+}

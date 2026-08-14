@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { apiErrorMessage } from '../api/client';
 
@@ -102,6 +102,12 @@ export default function Login() {
           autoComplete="current-password"
           required
         />
+
+        <div style={{ textAlign: 'right', marginTop: -8, marginBottom: 14 }}>
+          <Link to="/forgot-password" style={{ fontSize: 12, fontWeight: 600, color: '#64748b', textDecoration: 'none' }}>
+            Forgot password?
+          </Link>
+        </div>
 
         <button
           type="submit"

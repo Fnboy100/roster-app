@@ -14,6 +14,8 @@ const navLinkStyle = ({ isActive }) => ({
   whiteSpace: 'nowrap',
 });
 
+const PRESENCE_MANAGEMENT_ROLES = [ROLES.ADMIN, ROLES.MANAGER, ROLES.OUTLET_MANAGER];
+
 const NAV_ITEMS = [
   { to: '/roster', label: 'Roster' },
   { to: '/inventory', label: 'Dashboard' },
@@ -23,6 +25,10 @@ const NAV_ITEMS = [
   { to: '/inventory/closings', label: 'Closings' },
   { to: '/inventory/reports', label: 'Reports' },
   { to: '/inventory/audit-log', label: 'Audit', roles: [ROLES.ADMIN, ROLES.MANAGER] },
+  { to: '/presence/monitor', label: 'Presence Monitor', roles: PRESENCE_MANAGEMENT_ROLES },
+  { to: '/presence/duty-posts', label: 'Duty Posts', roles: PRESENCE_MANAGEMENT_ROLES },
+  { to: '/presence/duty-roster', label: 'Duty Roster', roles: PRESENCE_MANAGEMENT_ROLES },
+  { to: '/presence/reports', label: 'Presence Reports', roles: PRESENCE_MANAGEMENT_ROLES },
   { to: '/admin/outlets', label: 'Outlets', roles: [ROLES.ADMIN] },
   { to: '/admin/departments', label: 'Departments', roles: [ROLES.ADMIN] },
   { to: '/admin/items', label: 'Items', roles: [ROLES.ADMIN, ROLES.MANAGER, ROLES.OUTLET_MANAGER, ROLES.STOREKEEPER] },
@@ -60,6 +66,13 @@ export default function Layout() {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <Link
+            to="/section-device"
+            title="Open shared tablet mode for a duty post"
+            style={{ fontSize: 12, fontWeight: 700, color: '#334155', textDecoration: 'none', background: '#f1f5f9', borderRadius: 8, padding: '7px 12px' }}
+          >
+            Section Device
+          </Link>
           <NotificationBell />
           <Link
             to="/account/password"

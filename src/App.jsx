@@ -3,6 +3,7 @@ import { AuthProvider } from './context/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import Layout from './components/Layout';
 import Login from './pages/Login';
+import ForgotPassword from './pages/ForgotPassword';
 import ChangePassword from './pages/ChangePassword';
 import RosterApp from './pages/RosterApp';
 import InventoryDashboard from './pages/InventoryDashboard';
@@ -17,6 +18,11 @@ import AdminOutlets from './pages/admin/Outlets';
 import AdminDepartments from './pages/admin/Departments';
 import AdminItems from './pages/admin/Items';
 import AdminUsers from './pages/admin/Users';
+import DutyPosts from './pages/DutyPosts';
+import DutyRoster from './pages/DutyRoster';
+import SectionDevice from './pages/SectionDevice';
+import PresenceMonitor from './pages/PresenceMonitor';
+import PresenceReports from './pages/PresenceReports';
 
 // The roster tool moved back behind login: generating/submitting a roster
 // is now role-gated (supervisor/manager/admin) and department-scoped, which
@@ -29,6 +35,19 @@ export default function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<Login />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+
+          {/* Section Device runs full-screen on a shared tablet — no top nav
+              clutter, but still requires a login (the supervisor/in-charge
+              account for that section, per the operational model). */}
+          <Route
+            path="/section-device"
+            element={
+              <ProtectedRoute>
+                <SectionDevice />
+              </ProtectedRoute>
+            }
+          />
 
           <Route
             path="/"
@@ -42,6 +61,11 @@ export default function App() {
 
             <Route path="roster" element={<RosterApp />} />
             <Route path="account/password" element={<ChangePassword />} />
+
+            <Route path="presence/duty-posts" element={<DutyPosts />} />
+            <Route path="presence/duty-roster" element={<DutyRoster />} />
+            <Route path="presence/monitor" element={<PresenceMonitor />} />
+            <Route path="presence/reports" element={<PresenceReports />} />
 
             <Route path="inventory" element={<InventoryDashboard />} />
             <Route path="inventory/requisitions" element={<Requisitions />} />

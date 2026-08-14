@@ -1,18 +1,78 @@
-fix(frontend): mobile notification overflow, roster week navigation, users nav gating
+feat(frontend): add Duty Post & Presence Compliance pages
 
-- NotificationBell.jsx: dropdown now anchored to the viewport
-  (position: fixed, right/top) instead of the bell's own position, with
-  width: min(320px, calc(100vw - 24px)) and a matching max-height cap —
-  was overflowing off-screen on narrow/cramped mobile headers.
+- api/presence.js: new API module mirroring the auth.js/roster.js
+  pattern — duty posts, duty assignments, staff PIN, the six
+  section-device actions (clock-in/out, break start/end, post
+  check-in/out), event timeline, manager override events, live
+  status, rules, and violations (list + CSV export via a Blob
+  download, matching utils/exportCSV.js's approach).
 
-- RosterApp.jsx: week is no longer hardcoded to "this week". Generalized
-  getCurrentWeek() -> getWeek(offsetWeeks) and added weekOffset state with
-  prev/next/this-week navigation, so a supervisor can move to a future
-  week to generate next week's roster instead of being stuck once the
-  current week is approved (Generate was correctly hidden for an approved
-  period, but there was no way to reach a different, ungenerated week).
+- hooks/usePresenceLive.js: subscribes to the existing /ws socket
+  (api/websocket.js) and calls back on presence_event /
+  presence_violation / presence_violation_check pushes, so
+  PresenceMonitor.jsx updates live instead of polling.
 
-- Layout.jsx: "Users" nav link was still roles: [admin] from before
-  manager was granted user-management access on the backend — manager
-  couldn't see the page (or the deactivate button on it, which was
-  already correctly implemented) at all. Added ROLES.MANAGER.
+- components/PresenceStatusBadge.jsx, BreakButtonGroup.jsx,
+  ViolationCard.jsx: shared building blocks. BreakButtonGroup renders
+  only the actions valid for the current status (rather than showing
+  every button and disabling the wrong ones), and uses larger
+  tap-friendly buttons for the shared-tablet UI.
+
+- pages/DutyPosts.jsx: manager CRUD for posts per outlet (create /
+  deactivate / reactivate).
+
+- pages/DutyRoster.jsx: assign roster staff to a duty post for a
+  given date.
+
+- pages/SectionDevice.jsx: the shared-tablet UI. Staff pick their own
+  name from a large-tap grid (filtered by outlet/section and today's
+  roster), optionally enter a PIN, and get exactly the actions valid
+  for their current state. Polls every 20s since the tablet stays open
+  all shift with no user session to trigger a refresh otherwise.
+  Routed outside the normal app Layout (no nav chrome) but still
+  behind ProtectedRoute.
+
+- pages/PresenceMonitor.jsx: manager live dashboard — duty posts with
+  each assigned staff member's current status, a click-through event
+  timeline modal, and a "Log absence" modal that creates a
+  manager_observed_absence violation pre-filled with staff/post.
+  Refreshes on every usePresenceLive push.
+
+- pages/PresenceReports.jsx: violations list with date range/outlet/
+  status filters, acknowledge/resolve actions via ViolationCard, and
+  CSV export.
+
+- App.jsx: routes for all five pages above, plus /section-device as a
+  standalone full-screen route (still ProtectedRoute-gated) outside
+  the shared Layout.
+
+- components/Layout.jsx: nav links for Presence Monitor / Duty Posts /
+  Duty Roster / Presence Reports, gated to
+  admin/manager/outlet_manager; a "Section Device" shortcut visible to
+  everyone in the header.
+
+feat(frontend): add Forgot Password page
+
+- api/auth.js: forgotPassword(email) -> POST /auth/forgot-password,
+  resetPassword({ email, code, newPassword }) ->
+  POST /auth/reset-password. Both just surface the backend's
+  { message } response — apiErrorMessage (api/client.js) already
+  extracts a usable string from a FastAPI error response.
+
+- pages/ForgotPassword.jsx: two-step flow on one page/one route
+  (rather than two routes) so the email the code was sent to carries
+  over exactly as typed instead of round-tripping through a query
+  param or extra state. Step 1 collects the email and requests a
+  code; step 2 collects the 6-digit code + new password (with
+  confirm-password and min-length checks mirroring
+  ChangePassword.jsx) and includes a "Resend" action that re-hits
+  forgot-password with the same email. Styled to match Login.jsx
+  (same card, spacing, and color tokens) since it's reached directly
+  from the sign-in screen.
+
+- pages/Login.jsx: added a "Forgot password?" link under the password
+  field, routing to /forgot-password.
+
+- App.jsx: added the /forgot-password route alongside /login, outside
+  ProtectedRoute (matches /login — a signed-out user needs to reach
+  both).
