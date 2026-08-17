@@ -1,78 +1,65 @@
-feat(frontend): add Duty Post & Presence Compliance pages
+feat(frontend): add Floor roster UI — image-style table, validation panel, coverage-rule editor
 
-- api/presence.js: new API module mirroring the auth.js/roster.js
-  pattern — duty posts, duty assignments, staff PIN, the six
-  section-device actions (clock-in/out, break start/end, post
-  check-in/out), event timeline, manager override events, live
-  status, rules, and violations (list + CSV export via a Blob
-  download, matching utils/exportCSV.js's approach).
+Integrates the new backend Floor scheduling engine into the existing
+roster page rather than forking a parallel one — RosterApp.jsx branches
+on department code, so every other department's generate/submit/
+approve/change-request flow is byte-for-byte unchanged.
 
-- hooks/usePresenceLive.js: subscribes to the existing /ws socket
-  (api/websocket.js) and calls back on presence_event /
-  presence_violation / presence_violation_check pushes, so
-  PresenceMonitor.jsx updates live instead of polling.
+- api/rosterEngine.js — new API module: shift-template and coverage-
+  rule CRUD, ensure-default-catalog, generate (returns
+  { period, validation }), submit-for-approval, per-cell override, and
+  get-validation-report. Mirrors the existing api/roster.js/auth.js
+  module pattern (one thin function per endpoint, JSDoc comment naming
+  the route and payload shape).
 
-- components/PresenceStatusBadge.jsx, BreakButtonGroup.jsx,
-  ViolationCard.jsx: shared building blocks. BreakButtonGroup renders
-  only the actions valid for the current status (rather than showing
-  every button and disabling the wrong ones), and uses larger
-  tap-friendly buttons for the shared-tablet UI.
+- components/roster/FloorRosterTable.jsx — the image-style table: role
+  groups with a colored band header, one cell per day showing the
+  shift code (background color from the shift template) + its hours,
+  Total Hours and Balance columns (balance computed against that
+  role's coverage-rule target_weekly_hours), and a "Working today" row
+  per group for a quick per-day headcount. When the period is a draft,
+  clicking a cell turns it into a shift-code picker that calls
+  onOverride(entryId, shiftCode) — editing only reachable pre-approval,
+  matching the backend's draft-only override endpoint.
 
-- pages/DutyPosts.jsx: manager CRUD for posts per outlet (create /
-  deactivate / reactivate).
+- components/roster/ValidationPanel.jsx — renders the six validation
+  categories (missing coverage, consecutive-shift violations,
+  split-eligibility issues, manual-override conflicts, over/under
+  target hours) as collapsed-when-empty sections, or a single "all
+  clear" line when there's nothing to show.
 
-- pages/DutyRoster.jsx: assign roster staff to a duty post for a
-  given date.
+- components/roster/FloorSettingsPanel.jsx — inline (not a separate
+  route) shift-catalog summary and a per-role coverage-rule editor:
+  min staff/day, off days/week, target/max weekly hours, max
+  consecutive-closing streak, split-allowed and senior-rotation
+  checkboxes, with a Save button per row that only enables once that
+  row's form actually differs from the loaded rule.
 
-- pages/SectionDevice.jsx: the shared-tablet UI. Staff pick their own
-  name from a large-tap grid (filtered by outlet/section and today's
-  roster), optionally enter a PIN, and get exactly the actions valid
-  for their current state. Polls every 20s since the tablet stays open
-  all shift with no user session to trigger a refresh otherwise.
-  Routed outside the normal app Layout (no nav chrome) but still
-  behind ProtectedRoute.
+- pages/RosterApp.jsx — the integration point:
+  - isEngine = isEngineDepartment(currentDepartmentCode) gates every
+    branch below; false for every department except Floor.
+  - load() additionally fetches shift templates + coverage rules, and
+    the validation report for whatever period is loaded; isDraft is
+    now derived from the backend's period.status === 'draft' for
+    engine departments (previously always a local-only flag).
+  - handleGenerate/handleSubmit branch to the engine API for Floor,
+    unchanged client-side path otherwise.
+  - new handleOverrideEntry(entryId, shiftCode) for draft-only manual
+    edits, reloading both the period and the validation report
+    afterward so the panel never shows stale results.
+  - render swaps in FloorRosterTable + ValidationPanel (and
+    FloorSettingsPanel behind a "Shift & Coverage Rules" toggle,
+    replacing the old client-only Rules panel) for engine departments;
+    CSV/PDF export keep working unchanged since `roster` state is
+    still populated from the same entries via the existing
+    entriesToRoster mapper.
 
-- pages/PresenceMonitor.jsx: manager live dashboard — duty posts with
-  each assigned staff member's current status, a click-through event
-  timeline modal, and a "Log absence" modal that creates a
-  manager_observed_absence violation pre-filled with staff/post.
-  Refreshes on every usePresenceLive push.
+- data/constants.js — DEPARTMENT_POSITIONS.FLOOR extended with Butler,
+  Cashier, CRM Officer, Hostess (from the reference roster image) with
+  matching POSITION_COLORS entries; new
+  ENGINE_DEPARTMENT_CODES/isEngineDepartment() used by RosterApp.jsx —
+  the single switch that would need a department code added to extend
+  this to another department later.
 
-- pages/PresenceReports.jsx: violations list with date range/outlet/
-  status filters, acknowledge/resolve actions via ViolationCard, and
-  CSV export.
-
-- App.jsx: routes for all five pages above, plus /section-device as a
-  standalone full-screen route (still ProtectedRoute-gated) outside
-  the shared Layout.
-
-- components/Layout.jsx: nav links for Presence Monitor / Duty Posts /
-  Duty Roster / Presence Reports, gated to
-  admin/manager/outlet_manager; a "Section Device" shortcut visible to
-  everyone in the header.
-
-feat(frontend): add Forgot Password page
-
-- api/auth.js: forgotPassword(email) -> POST /auth/forgot-password,
-  resetPassword({ email, code, newPassword }) ->
-  POST /auth/reset-password. Both just surface the backend's
-  { message } response — apiErrorMessage (api/client.js) already
-  extracts a usable string from a FastAPI error response.
-
-- pages/ForgotPassword.jsx: two-step flow on one page/one route
-  (rather than two routes) so the email the code was sent to carries
-  over exactly as typed instead of round-tripping through a query
-  param or extra state. Step 1 collects the email and requests a
-  code; step 2 collects the 6-digit code + new password (with
-  confirm-password and min-length checks mirroring
-  ChangePassword.jsx) and includes a "Resend" action that re-hits
-  forgot-password with the same email. Styled to match Login.jsx
-  (same card, spacing, and color tokens) since it's reached directly
-  from the sign-in screen.
-
-- pages/Login.jsx: added a "Forgot password?" link under the password
-  field, routing to /forgot-password.
-
-- App.jsx: added the /forgot-password route alongside /login, outside
-  ProtectedRoute (matches /login — a signed-out user needs to reach
-  both).
+No new routes were added — everything renders inline on the existing
+/roster page, so there's nothing new to wire into App.jsx or Layout.jsx.

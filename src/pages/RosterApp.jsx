@@ -2,8 +2,9 @@ import { useState, useCallback, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { apiErrorMessage } from '../api/client';
 import * as rosterApi from '../api/roster';
+import * as rosterEngineApi from '../api/rosterEngine';
 import * as departmentsApi from '../api/departments';
-import { DEFAULT_RULES, DAYS, makeCell, positionsForDepartment } from '../data/constants';
+import { DEFAULT_RULES, DAYS, makeCell, positionsForDepartment, isEngineDepartment } from '../data/constants';
 import { generateRoster } from '../utils/generateRoster';
 import { exportCSV } from '../utils/exportCSV';
 import { exportPDF } from '../utils/exportPDF';
@@ -15,6 +16,9 @@ import RosterStatusBadge from '../components/roster/RosterStatusBadge';
 import RosterApprovalPanel from '../components/roster/RosterApprovalPanel';
 import ChangeRequestModal from '../components/roster/ChangeRequestModal';
 import ChangeRequestsList from '../components/roster/ChangeRequestsList';
+import FloorRosterTable from '../components/roster/FloorRosterTable';
+import ValidationPanel from '../components/roster/ValidationPanel';
+import FloorSettingsPanel from '../components/roster/FloorSettingsPanel';
 
 const btn = (bg, color) => ({
   background: bg, color, border: 'none', borderRadius: 8,
@@ -80,19 +84,28 @@ export default function RosterApp() {
     ? departments.find((d) => d.id === effectiveDepartmentId)?.code
     : user?.department?.code;
   const availablePositions = positionsForDepartment(currentDepartmentCode);
+  const isEngine = isEngineDepartment(currentDepartmentCode);
 
   const [staff, setStaff] = useState([]);
   const [rules, setRules] = useState(DEFAULT_RULES);
   const [roster, setRoster] = useState({});
   const [period, setPeriod] = useState(null);       // the backend RosterPeriodOut for this dept+week, or null
-  const [isDraft, setIsDraft] = useState(false);     // true = freshly generated locally, not yet submitted
+  const [isDraft, setIsDraft] = useState(false);     // true = freshly generated (client-side) or backend status='draft' (engine), not yet submitted
   const [changeRequests, setChangeRequests] = useState([]);
   const [showRules, setShowRules] = useState(false);
+  const [showFloorSettings, setShowFloorSettings] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [showChangeModal, setShowChangeModal] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+
+  // Floor-engine-only state: the shift catalog + coverage rules driving
+  // FloorRosterTable/FloorSettingsPanel, and the validation report for
+  // whatever period is currently loaded.
+  const [shiftTemplates, setShiftTemplates] = useState([]);
+  const [coverageRules, setCoverageRules] = useState([]);
+  const [validation, setValidation] = useState(null);
 
   useEffect(() => {
     if (!isMultiDept) return;
@@ -110,6 +123,15 @@ export default function RosterApp() {
       const apiStaff = await rosterApi.listRosterStaff({ departmentId: effectiveDepartmentId });
       setStaff(staffFromApi(apiStaff));
 
+      if (isEngine) {
+        const [templates, rules] = await Promise.all([
+          rosterEngineApi.listShiftTemplates({ departmentId: effectiveDepartmentId }),
+          rosterEngineApi.listCoverageRules(effectiveDepartmentId),
+        ]);
+        setShiftTemplates(templates);
+        setCoverageRules(rules);
+      }
+
       const periods = await rosterApi.listRosterPeriods({ departmentId: effectiveDepartmentId });
       const current = periods.find((p) => p.week_start === week.start) || null;
 
@@ -117,7 +139,11 @@ export default function RosterApp() {
         const full = await rosterApi.getRosterPeriod(current.id);
         setPeriod(full);
         setRoster(entriesToRoster(full.entries));
-        setIsDraft(false);
+        setIsDraft(full.status === 'draft');
+
+        if (isEngine) {
+          setValidation(await rosterEngineApi.getValidationReport(full.id));
+        }
 
         if (full.status === 'approved') {
           const reqs = await rosterApi.listChangeRequests({ departmentId: effectiveDepartmentId });
@@ -130,13 +156,14 @@ export default function RosterApp() {
         setRoster({});
         setIsDraft(false);
         setChangeRequests([]);
+        setValidation(null);
       }
     } catch (err) {
       setError(apiErrorMessage(err, 'Could not load the roster.'));
     } finally {
       setLoading(false);
     }
-  }, [effectiveDepartmentId, week.start]);
+  }, [effectiveDepartmentId, week.start, isEngine]);
 
   useEffect(() => {
     load();
@@ -146,12 +173,41 @@ export default function RosterApp() {
   const canSubmit = isGenerator && isDraft;
   const canRequestChange = isGenerator && period?.status === 'approved' && !isDraft;
 
-  const handleGenerate = () => {
+  const handleGenerate = async () => {
     if (staff.length === 0) {
       setError('Add at least one staff member before generating a roster.');
       return;
     }
     setError('');
+
+    if (isEngine) {
+      try {
+        const result = await rosterEngineApi.generateFloorRoster({
+          department_id: isMultiDept ? effectiveDepartmentId : undefined,
+          week_start: week.start,
+          week_end: week.end,
+          week_label: week.label,
+        });
+        setPeriod(result.period);
+        setValidation(result.validation);
+        setIsDraft(result.period.status === 'draft');
+        setRoster(entriesToRoster(result.period.entries));
+        // A fresh generation may have auto-seeded the catalog/rules for
+        // this department the first time — reload them so
+        // FloorSettingsPanel/FloorRosterTable reflect what was just created.
+        const [templates, rules] = await Promise.all([
+          rosterEngineApi.listShiftTemplates({ departmentId: effectiveDepartmentId }),
+          rosterEngineApi.listCoverageRules(effectiveDepartmentId),
+        ]);
+        setShiftTemplates(templates);
+        setCoverageRules(rules);
+        setNotice('');
+      } catch (err) {
+        setError(apiErrorMessage(err, 'Could not generate the roster.'));
+      }
+      return;
+    }
+
     setRoster(generateRoster(staff, rules));
     setIsDraft(true);
     setNotice('');
@@ -159,6 +215,19 @@ export default function RosterApp() {
 
   const handleSubmit = async () => {
     setError('');
+
+    if (isEngine) {
+      try {
+        const submitted = await rosterEngineApi.submitDraftForApproval(period.id);
+        setPeriod(submitted);
+        setIsDraft(false);
+        setNotice('Roster submitted — awaiting manager approval.');
+      } catch (err) {
+        setError(apiErrorMessage(err, 'Could not submit the roster.'));
+      }
+      return;
+    }
+
     const entries = [];
     staff.forEach((s) => {
       DAYS.forEach((day) => {
@@ -180,6 +249,21 @@ export default function RosterApp() {
       setNotice('Roster submitted — awaiting manager approval.');
     } catch (err) {
       setError(apiErrorMessage(err, 'Could not submit the roster.'));
+    }
+  };
+
+  const handleOverrideEntry = async (entryId, shiftCode) => {
+    setError('');
+    try {
+      await rosterEngineApi.overrideEntry(period.id, entryId, shiftCode);
+      const [full, freshValidation] = await Promise.all([
+        rosterApi.getRosterPeriod(period.id),
+        rosterEngineApi.getValidationReport(period.id),
+      ]);
+      setPeriod(full);
+      setValidation(freshValidation);
+    } catch (err) {
+      setError(apiErrorMessage(err, 'Could not apply that override.'));
     }
   };
 
@@ -301,10 +385,13 @@ export default function RosterApp() {
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 18 }}>
             {canGenerate && <button onClick={handleGenerate} style={btn('#0f172a', '#fff')}>&#8635; Generate</button>}
             {canSubmit && <button onClick={handleSubmit} style={btn('#16a34a', '#fff')}>Submit for Approval</button>}
-            {isGenerator && (
+            {isGenerator && !isEngine && (
               <button onClick={() => setShowRules((v) => !v)} style={btn('#f1f5f9', '#334155')}>&#9881; Rules</button>
             )}
-            {isDraft && (
+            {isGenerator && isEngine && (
+              <button onClick={() => setShowFloorSettings((v) => !v)} style={btn('#f1f5f9', '#334155')}>&#9881; Shift & Coverage Rules</button>
+            )}
+            {isDraft && !isEngine && (
               <button onClick={() => setEditMode((v) => !v)} style={btn(editMode ? '#0f172a' : '#f1f5f9', editMode ? '#fff' : '#334155')}>
                 {editMode ? 'Done Editing' : '\u2212 Edit'}
               </button>
@@ -320,8 +407,17 @@ export default function RosterApp() {
             )}
           </div>
 
-          {showRules && isGenerator && (
+          {showRules && isGenerator && !isEngine && (
             <RulesPanel rules={rules} onChange={setRules} />
+          )}
+
+          {showFloorSettings && isGenerator && isEngine && (
+            <FloorSettingsPanel
+              shiftTemplates={shiftTemplates}
+              coverageRules={coverageRules}
+              departmentId={effectiveDepartmentId}
+              onRulesChanged={setCoverageRules}
+            />
           )}
 
           {isGenerator && canGenerate && (
@@ -332,6 +428,24 @@ export default function RosterApp() {
             <div style={{ color: '#94a3b8', fontSize: 14, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, padding: 30, textAlign: 'center' }}>
               No staff on this roster yet.{isGenerator ? ' Add staff, then Generate.' : ''}
             </div>
+          ) : isEngine ? (
+            period ? (
+              <>
+                <ValidationPanel report={validation} />
+                <FloorRosterTable
+                  period={period}
+                  staff={staff}
+                  shiftTemplates={shiftTemplates}
+                  coverageRules={coverageRules}
+                  editable={isDraft}
+                  onOverride={handleOverrideEntry}
+                />
+              </>
+            ) : (
+              <div style={{ color: '#94a3b8', fontSize: 14, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, padding: 30, textAlign: 'center' }}>
+                {isGenerator ? 'Click Generate to build this week\u2019s Floor roster.' : 'No roster generated for this week yet.'}
+              </div>
+            )
           ) : (
             <>
               <StatsBar staff={staff} roster={roster} />
