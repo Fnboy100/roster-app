@@ -141,8 +141,8 @@ function RoleGroup({ role, rows, templateByCode, editable, onOverride, overrideO
 }
 
 /**
- * Renders one Floor roster period the way the reference manual roster
- * looked: dates across the top, staff grouped by role with a colored
+ * Renders one roster period the way the reference manual rosters looked
+ * (Floor and Kitchen both use this): dates across the top, staff grouped by role with a colored
  * band header per group, one colored cell per day showing the shift code
  * + its hours, then Total Hours and Balance (vs. that role's configured
  * target_weekly_hours) columns, plus a per-day "working" total row under

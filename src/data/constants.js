@@ -45,11 +45,12 @@ export const POSITION_COLORS = {
   Barback:    { bg: "#f5f3ff", border: "#a78bfa", text: "#3b0764" },
 
   // --- Kitchen (red / orange family) ---
-  "Kitchen Supervisor": { bg: "#fef2f2", border: "#ef4444", text: "#7f1d1d" },
-  "Head Chef":          { bg: "#fff7ed", border: "#fb923c", text: "#7c2d12" },
-  "Sous Chef":          { bg: "#fffbeb", border: "#fbbf24", text: "#78350f" },
-  "Line Cook":          { bg: "#fef2f2", border: "#f87171", text: "#991b1b" },
-  "Kitchen Porter":     { bg: "#fefce8", border: "#eab308", text: "#713f12" },
+  "Hot Section":       { bg: "#fef2f2", border: "#ef4444", text: "#7f1d1d" },
+  "Salad & Dessert":   { bg: "#fff7ed", border: "#fb923c", text: "#7c2d12" },
+  "Bakery":            { bg: "#fffbeb", border: "#fbbf24", text: "#78350f" },
+  "Chinese Section":   { bg: "#fef2f2", border: "#f87171", text: "#991b1b" },
+  "Sushi Section":     { bg: "#fdf4ff", border: "#e879f9", text: "#701a75" },
+  "Butcher":           { bg: "#fefce8", border: "#eab308", text: "#713f12" },
 
   // --- Floor (green family) ---
   "Floor Supervisor": { bg: "#f0fdf4", border: "#22c55e", text: "#14532d" },
@@ -97,7 +98,7 @@ export const DEFAULT_RULES = {
 // department sharing the Bar's Supervisor/Bartender/Barback list.
 export const DEPARTMENT_POSITIONS = {
   BAR:         ["Supervisor", "Bartender", "Barback"],
-  KITCHEN:     ["Kitchen Supervisor", "Head Chef", "Sous Chef", "Line Cook", "Kitchen Porter"],
+  KITCHEN:     ["Hot Section", "Salad & Dessert", "Bakery", "Chinese Section", "Sushi Section", "Butcher"],
   FLOOR:       ["Floor Supervisor", "Butler", "Waiter", "Host", "Runner", "Cashier", "CRM Officer", "Hostess"],
   STEWARDING:  ["Steward Supervisor", "Steward", "Dishwasher"],
   STORE:       ["Store Supervisor", "Storekeeper", "Store Assistant"],
@@ -108,8 +109,11 @@ export const DEPARTMENT_POSITIONS = {
 // fairness-second, deterministic) instead of the client-side generator in
 // utils/generateRoster.js. RosterApp.jsx branches on this to swap in
 // FloorRosterTable + the generate/validate/submit-draft flow; every other
-// department's flow is unchanged.
-export const ENGINE_DEPARTMENT_CODES = ["FLOOR"];
+// department's flow is unchanged. Kitchen uses the exact same engine as
+// Floor with its own shift catalog and coverage rules (see
+// app/services/roster_engine/catalog.py) — nothing in the engine itself
+// is Floor-specific.
+export const ENGINE_DEPARTMENT_CODES = ["FLOOR", "KITCHEN"];
 
 export function isEngineDepartment(departmentCode) {
   return ENGINE_DEPARTMENT_CODES.includes(departmentCode);

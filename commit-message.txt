@@ -1,65 +1,56 @@
-feat(frontend): add Floor roster UI — image-style table, validation panel, coverage-rule editor
+fix(frontend): route Floor/Kitchen export through the backend's normalized roster; add Kitchen to the engine
 
-Integrates the new backend Floor scheduling engine into the existing
-roster page rather than forking a parallel one — RosterApp.jsx branches
-on department code, so every other department's generate/submit/
-approve/change-request flow is byte-for-byte unchanged.
+Floor's PDF export was rendering empty tables and its CSV was missing
+hours/totals/variance entirely — root cause was two hardcoded,
+Bar-specific constants in utils/exportPDF.js/exportCSV.js and a lossy
+client-side roster mapping that dropped shift_code/hours before export
+ever saw them (see the backend commit for the full root-cause writeup).
+Rather than patch those constants for Floor specifically, engine-managed
+departments now export through the new backend endpoint that reads the
+exact same normalized rows the on-screen table does; Bar/Stewarding/
+Store keep their original, completely untouched exportCSV.js/exportPDF.js
+path.
 
-- api/rosterEngine.js — new API module: shift-template and coverage-
-  rule CRUD, ensure-default-catalog, generate (returns
-  { period, validation }), submit-for-approval, per-cell override, and
-  get-validation-report. Mirrors the existing api/roster.js/auth.js
-  module pattern (one thin function per endpoint, JSDoc comment naming
-  the route and payload shape).
+- api/rosterEngine.js: new exportRoster(periodId, format) — GET
+  /roster/engine/periods/{id}/export?format=csv|pdf as a blob download,
+  same pattern already used for presence-violation CSV export. Reads
+  the real filename from the response's Content-Disposition header
+  instead of hardcoding one. Also new getNormalizedRoster(periodId) for
+  anything that wants the same rows without triggering a file download.
 
-- components/roster/FloorRosterTable.jsx — the image-style table: role
-  groups with a colored band header, one cell per day showing the
-  shift code (background color from the shift template) + its hours,
-  Total Hours and Balance columns (balance computed against that
-  role's coverage-rule target_weekly_hours), and a "Working today" row
-  per group for a quick per-day headcount. When the period is a draft,
-  clicking a cell turns it into a shift-code picker that calls
-  onOverride(entryId, shiftCode) — editing only reachable pre-approval,
-  matching the backend's draft-only override endpoint.
+- pages/RosterApp.jsx:
+  - CSV/PDF buttons now branch: isEngine departments call the new
+    handleExport('csv'|'pdf') (backend-normalized download, works
+    identically for a roster generated this session or reloaded from a
+    save), everything else calls the original exportCSV/exportPDF
+    unchanged.
+  - new `exporting` state disables the button and shows "Exporting…"
+    while a download is in flight, and surfaces a real error message on
+    failure instead of failing silently.
+  - the one hardcoded "Floor roster" empty-state string now reads
+    "Kitchen roster" when the department code is KITCHEN.
 
-- components/roster/ValidationPanel.jsx — renders the six validation
-  categories (missing coverage, consecutive-shift violations,
-  split-eligibility issues, manual-override conflicts, over/under
-  target hours) as collapsed-when-empty sections, or a single "all
-  clear" line when there's nothing to show.
+- data/constants.js:
+  - ENGINE_DEPARTMENT_CODES: added "KITCHEN" — the only line that makes
+    Kitchen use the backend scheduling engine instead of the client-side
+    generator; FloorRosterTable, ValidationPanel, and
+    FloorSettingsPanel needed zero changes to work for Kitchen, since
+    none of them contained Floor-specific logic to begin with (updated
+    their doc comments to say so, no behavior changed).
+  - DEPARTMENT_POSITIONS.KITCHEN: replaced the placeholder role list
+    ("Kitchen Supervisor"/"Head Chef"/"Sous Chef"/"Line Cook"/"Kitchen
+    Porter") with the six sections from the Arami Kitchen Schedule
+    reference image — Hot Section, Salad & Dessert, Bakery, Chinese
+    Section, Sushi Section, Butcher — matching what the backend's
+    Kitchen coverage-rule catalog actually seeds. Any existing Kitchen
+    staff record using the old position names will need updating to one
+    of the new section names, or the backend's new role-assignment
+    validation check will flag it rather than silently misscheduling
+    them.
+  - POSITION_COLORS: updated the Kitchen color block's keys to match
+    the new section names (same red/orange family, plus a new
+    magenta/purple entry for Sushi Section).
 
-- components/roster/FloorSettingsPanel.jsx — inline (not a separate
-  route) shift-catalog summary and a per-role coverage-rule editor:
-  min staff/day, off days/week, target/max weekly hours, max
-  consecutive-closing streak, split-allowed and senior-rotation
-  checkboxes, with a Save button per row that only enables once that
-  row's form actually differs from the loaded rule.
-
-- pages/RosterApp.jsx — the integration point:
-  - isEngine = isEngineDepartment(currentDepartmentCode) gates every
-    branch below; false for every department except Floor.
-  - load() additionally fetches shift templates + coverage rules, and
-    the validation report for whatever period is loaded; isDraft is
-    now derived from the backend's period.status === 'draft' for
-    engine departments (previously always a local-only flag).
-  - handleGenerate/handleSubmit branch to the engine API for Floor,
-    unchanged client-side path otherwise.
-  - new handleOverrideEntry(entryId, shiftCode) for draft-only manual
-    edits, reloading both the period and the validation report
-    afterward so the panel never shows stale results.
-  - render swaps in FloorRosterTable + ValidationPanel (and
-    FloorSettingsPanel behind a "Shift & Coverage Rules" toggle,
-    replacing the old client-only Rules panel) for engine departments;
-    CSV/PDF export keep working unchanged since `roster` state is
-    still populated from the same entries via the existing
-    entriesToRoster mapper.
-
-- data/constants.js — DEPARTMENT_POSITIONS.FLOOR extended with Butler,
-  Cashier, CRM Officer, Hostess (from the reference roster image) with
-  matching POSITION_COLORS entries; new
-  ENGINE_DEPARTMENT_CODES/isEngineDepartment() used by RosterApp.jsx —
-  the single switch that would need a department code added to extend
-  this to another department later.
-
-No new routes were added — everything renders inline on the existing
-/roster page, so there's nothing new to wire into App.jsx or Layout.jsx.
+No new routes were added — exports still trigger from the existing
+roster page; Kitchen reuses every roster-engine component Floor already
+had.

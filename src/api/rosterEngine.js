@@ -83,3 +83,38 @@ export async function getValidationReport(periodId) {
   const { data } = await client.get(`/roster/engine/periods/${periodId}/validation`);
   return data;
 }
+
+/**
+ * GET /roster/engine/periods/{id}/normalized -> List[NormalizedRosterRowOut].
+ * The exact same rows the CSV/PDF export and the on-screen table are built
+ * from — see app/services/roster_engine/normalize.py.
+ */
+export async function getNormalizedRoster(periodId) {
+  const { data } = await client.get(`/roster/engine/periods/${periodId}/normalized`);
+  return data;
+}
+
+/**
+ * GET /roster/engine/periods/{id}/export?format=csv|pdf — triggers a
+ * browser download. Works identically for a roster generated moments ago
+ * or one reloaded from the backend, since both are the same persisted
+ * period by the time this is called.
+ */
+export async function exportRoster(periodId, format) {
+  const response = await client.get(`/roster/engine/periods/${periodId}/export`, {
+    params: { format },
+    responseType: 'blob',
+  });
+  const mimeType = format === 'pdf' ? 'application/pdf' : 'text/csv';
+  const blob = new Blob([response.data], { type: mimeType });
+
+  const disposition = response.headers?.['content-disposition'] || '';
+  const match = disposition.match(/filename="?([^"]+)"?/);
+  const filename = match ? match[1] : `roster.${format}`;
+
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}

@@ -106,6 +106,7 @@ export default function RosterApp() {
   const [shiftTemplates, setShiftTemplates] = useState([]);
   const [coverageRules, setCoverageRules] = useState([]);
   const [validation, setValidation] = useState(null);
+  const [exporting, setExporting] = useState(null); // 'csv' | 'pdf' | null — which export is in flight
 
   useEffect(() => {
     if (!isMultiDept) return;
@@ -267,6 +268,23 @@ export default function RosterApp() {
     }
   };
 
+  const handleExport = async (format) => {
+    if (!period) return;
+    setError('');
+    setExporting(format);
+    try {
+      // Same period.id whether this roster was just generated in this
+      // session or is being reopened from a saved state — the backend
+      // reloads and normalizes it fresh either way (see
+      // app/services/roster_engine/service.py:export_roster).
+      await rosterEngineApi.exportRoster(period.id, format);
+    } catch (err) {
+      setError(apiErrorMessage(err, `Could not export the ${format.toUpperCase()}.`));
+    } finally {
+      setExporting(null);
+    }
+  };
+
   const handleAddStaff = async (member) => {
     setError('');
     try {
@@ -401,8 +419,20 @@ export default function RosterApp() {
             )}
             {period?.status === 'approved' && !isDraft && (
               <>
-                <button onClick={() => exportCSV(staff, roster, week.label)} style={btn('#16a34a', '#fff')}>&#8595; CSV</button>
-                <button onClick={() => exportPDF(staff, roster, week.label)} style={btn('#dc2626', '#fff')}>&#8595; PDF</button>
+                <button
+                  onClick={() => (isEngine ? handleExport('csv') : exportCSV(staff, roster, week.label))}
+                  disabled={exporting === 'csv'}
+                  style={btn('#16a34a', '#fff')}
+                >
+                  &#8595; {exporting === 'csv' ? 'Exporting…' : 'CSV'}
+                </button>
+                <button
+                  onClick={() => (isEngine ? handleExport('pdf') : exportPDF(staff, roster, week.label))}
+                  disabled={exporting === 'pdf'}
+                  style={btn('#dc2626', '#fff')}
+                >
+                  &#8595; {exporting === 'pdf' ? 'Exporting…' : 'PDF'}
+                </button>
               </>
             )}
           </div>
@@ -443,7 +473,7 @@ export default function RosterApp() {
               </>
             ) : (
               <div style={{ color: '#94a3b8', fontSize: 14, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, padding: 30, textAlign: 'center' }}>
-                {isGenerator ? 'Click Generate to build this week\u2019s Floor roster.' : 'No roster generated for this week yet.'}
+                {isGenerator ? `Click Generate to build this week\u2019s ${currentDepartmentCode === 'KITCHEN' ? 'Kitchen' : 'Floor'} roster.` : 'No roster generated for this week yet.'}
               </div>
             )
           ) : (

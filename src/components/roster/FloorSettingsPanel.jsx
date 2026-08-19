@@ -49,7 +49,8 @@ function RuleRow({ rule, onSave }) {
 }
 
 /**
- * Compact inline settings surface for the Floor engine — shift catalog
+ * Compact inline settings surface for any engine department (Floor,
+ * Kitchen) — shift catalog
  * (read-only summary; codes are seeded from the reference roster image
  * and rarely need day-to-day editing) and coverage rules (fully editable
  * per role: coverage minimums, weekly hour targets, rotation limits).
