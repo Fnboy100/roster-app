@@ -4,7 +4,7 @@ import { apiErrorMessage } from '../api/client';
 import * as rosterApi from '../api/roster';
 import * as rosterEngineApi from '../api/rosterEngine';
 import * as departmentsApi from '../api/departments';
-import { DEFAULT_RULES, DAYS, makeCell, positionsForDepartment, isEngineDepartment } from '../data/constants';
+import { DEFAULT_RULES, DAYS, makeCell, positionsForDepartment, isEngineDepartment, departmentShowsOutlet } from '../data/constants';
 import { generateRoster } from '../utils/generateRoster';
 import { exportCSV } from '../utils/exportCSV';
 import { exportPDF } from '../utils/exportPDF';
@@ -12,6 +12,7 @@ import StatsBar    from '../components/StatsBar';
 import RosterTable from '../components/RosterTable';
 import RulesPanel  from '../components/RulesPanel';
 import AddStaffForm from '../components/AddStaffForm';
+import StaffManagementPanel from '../components/StaffManagementPanel';
 import RosterStatusBadge from '../components/roster/RosterStatusBadge';
 import RosterApprovalPanel from '../components/roster/RosterApprovalPanel';
 import ChangeRequestModal from '../components/roster/ChangeRequestModal';
@@ -85,10 +86,21 @@ export default function RosterApp() {
     : user?.department?.code;
   const availablePositions = positionsForDepartment(currentDepartmentCode);
   const isEngine = isEngineDepartment(currentDepartmentCode);
+  const showOutlet = departmentShowsOutlet(currentDepartmentCode); // false for departments like Stewarding that don't use outlet tags
 
   const [staff, setStaff] = useState([]);
   const [rules, setRules] = useState(DEFAULT_RULES);
   const [roster, setRoster] = useState({});
+  // Departments without outlet tags (see departmentShowsOutlet) must never
+  // carry a leftover defaultOutlet from a previous department in this same
+  // session — the picker that would let a manager fix it is hidden for
+  // exactly those departments, so it's cleared automatically instead.
+  useEffect(() => {
+    if (!showOutlet && rules.defaultOutlet !== 'none') {
+      setRules((prev) => ({ ...prev, defaultOutlet: 'none' }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showOutlet]);
   const [period, setPeriod] = useState(null);       // the backend RosterPeriodOut for this dept+week, or null
   const [isDraft, setIsDraft] = useState(false);     // true = freshly generated (client-side) or backend status='draft' (engine), not yet submitted
   const [changeRequests, setChangeRequests] = useState([]);
@@ -107,6 +119,7 @@ export default function RosterApp() {
   const [coverageRules, setCoverageRules] = useState([]);
   const [validation, setValidation] = useState(null);
   const [exporting, setExporting] = useState(null); // 'csv' | 'pdf' | null — which export is in flight
+  const [staffNotice, setStaffNotice] = useState(''); // e.g. "X was deactivated instead of deleted — has roster history"
 
   useEffect(() => {
     if (!isMultiDept) return;
@@ -300,6 +313,31 @@ export default function RosterApp() {
     }
   };
 
+  const handleUpdateStaff = async (staffId, payload) => {
+    setError('');
+    try {
+      await rosterApi.updateRosterStaff(staffId, payload);
+      const apiStaff = await rosterApi.listRosterStaff({ departmentId: effectiveDepartmentId });
+      setStaff(staffFromApi(apiStaff));
+    } catch (err) {
+      setError(apiErrorMessage(err, 'Could not update this staff member.'));
+      throw err; // let the row know the save didn't go through, so it stays in edit mode
+    }
+  };
+
+  const handleDeleteStaff = async (staffId) => {
+    setError('');
+    setStaffNotice('');
+    try {
+      const result = await rosterApi.deleteRosterStaff(staffId);
+      setStaffNotice(result.message);
+      const apiStaff = await rosterApi.listRosterStaff({ departmentId: effectiveDepartmentId });
+      setStaff(staffFromApi(apiStaff));
+    } catch (err) {
+      setError(apiErrorMessage(err, 'Could not remove this staff member.'));
+    }
+  };
+
   const handleCellChange = (staffId, day, value) => {
     if (!isDraft) return; // protocol enforcement: no direct edits outside of a local, unsubmitted draft
     setRoster((prev) => ({ ...prev, [staffId]: { ...prev[staffId], [day]: value } }));
@@ -420,14 +458,14 @@ export default function RosterApp() {
             {period?.status === 'approved' && !isDraft && (
               <>
                 <button
-                  onClick={() => (isEngine ? handleExport('csv') : exportCSV(staff, roster, week.label))}
+                  onClick={() => (isEngine ? handleExport('csv') : exportCSV(staff, roster, week.label, currentDepartmentCode))}
                   disabled={exporting === 'csv'}
                   style={btn('#16a34a', '#fff')}
                 >
                   &#8595; {exporting === 'csv' ? 'Exporting…' : 'CSV'}
                 </button>
                 <button
-                  onClick={() => (isEngine ? handleExport('pdf') : exportPDF(staff, roster, week.label))}
+                  onClick={() => (isEngine ? handleExport('pdf') : exportPDF(staff, roster, week.label, currentDepartmentCode))}
                   disabled={exporting === 'pdf'}
                   style={btn('#dc2626', '#fff')}
                 >
@@ -438,7 +476,7 @@ export default function RosterApp() {
           </div>
 
           {showRules && isGenerator && !isEngine && (
-            <RulesPanel rules={rules} onChange={setRules} />
+            <RulesPanel rules={rules} onChange={setRules} showOutlet={showOutlet} />
           )}
 
           {showFloorSettings && isGenerator && isEngine && (
@@ -451,7 +489,16 @@ export default function RosterApp() {
           )}
 
           {isGenerator && canGenerate && (
-            <AddStaffForm onAdd={handleAddStaff} positions={availablePositions} />
+            <>
+              <AddStaffForm onAdd={handleAddStaff} positions={availablePositions} />
+              <StaffManagementPanel
+                staff={staff}
+                positions={availablePositions}
+                onUpdate={handleUpdateStaff}
+                onDelete={handleDeleteStaff}
+                message={staffNotice}
+              />
+            </>
           )}
 
           {staff.length === 0 ? (
@@ -478,14 +525,17 @@ export default function RosterApp() {
             )
           ) : (
             <>
-              <StatsBar staff={staff} roster={roster} />
+              <StatsBar staff={staff} roster={roster} showOutlet={showOutlet} />
               <RosterTable
                 staff={staff}
                 roster={roster}
                 rules={rules}
                 editMode={editMode && isDraft}
+                showOutlet={showOutlet}
                 onCellChange={handleCellChange}
-                onRemove={() => {}}
+                onRemove={(staffId) => {
+                  if (window.confirm('Remove this staff member from the roster?')) handleDeleteStaff(staffId);
+                }}
               />
             </>
           )}

@@ -5,14 +5,24 @@
  * Requires two packages — run once in your project root:
  *   npm install jspdf jspdf-autotable
  *
- * Usage (already wired into App.jsx — see instructions below):
+ * Usage:
  *   import { exportPDF } from './utils/exportPDF';
- *   exportPDF(staff, roster, weekLabel);
+ *   exportPDF(staff, roster, weekLabel, departmentCode);
+ *
+ * `departmentCode` is optional (defaults to the Bar-style legend/outlet
+ * behavior this file always had) — passing e.g. "STEWARDING" switches the
+ * AM/PM legend text and hides outlet tags entirely, per
+ * DEPARTMENT_SHIFT_LEGEND in data/constants.js. Position grouping is
+ * derived from the staff actually present (ordered via
+ * DEPARTMENT_POSITIONS when possible) rather than a hardcoded list — this
+ * is what previously made this file only work correctly for Bar: with a
+ * fixed Bar-only position list, no other department's staff ever matched
+ * a group, so the table came out empty.
  */
 
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { DAYS, WEEKEND_DAYS, POSITIONS, cellLabel } from '../data/constants';
+import { DAYS, WEEKEND_DAYS, DEPARTMENT_POSITIONS, POSITION_COLORS, cellLabel, shiftLegendForDepartment } from '../data/constants';
 
 const SHIFT_FILL = {
   AM:  [254, 249, 195],
@@ -24,17 +34,19 @@ const SHIFT_TEXT = {
   PM:  [ 30,  58, 138],
   Off: [148, 163, 184],
 };
-const OUTLET_SUFFIX_COLOR = {
-  T:   [22, 101, 52],
-  RST: [107, 33, 168],
-};
-const POSITION_HEADER_FILL = {
-  Supervisor: [251, 191,  36],
-  Bartender:  [ 56, 189, 248],
-  Barback:    [167, 139, 250],
-};
 
-export function exportPDF(staff, roster, weekLabel) {
+const ALL_KNOWN_POSITIONS = Object.values(DEPARTMENT_POSITIONS).flat();
+const FALLBACK_HEADER_FILL = [148, 163, 184];
+
+function hexToRgb(hex) {
+  const clean = (hex || '').replace('#', '');
+  if (clean.length !== 6) return FALLBACK_HEADER_FILL;
+  const num = parseInt(clean, 16);
+  return [(num >> 16) & 255, (num >> 8) & 255, num & 255];
+}
+
+export function exportPDF(staff, roster, weekLabel, departmentCode) {
+  const legend = shiftLegendForDepartment(departmentCode);
   const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
 
   doc.setFont('helvetica', 'bold');
@@ -46,30 +58,44 @@ export function exportPDF(staff, roster, weekLabel) {
   doc.setFontSize(10);
   doc.setTextColor(100, 116, 139);
   doc.text(`Week: ${weekLabel}`, 40, 62);
-  doc.text('AM = 11am–6pm   |   PM = 4pm–12am   |   T = Terraces   |   RST = Restaurant   |   🔒 Fri·Sat·Sun = No Off', 40, 76);
+  const legendLine = legend.showOutlet
+    ? `${legend.am}   |   ${legend.pm}   |   T = Terraces   |   RST = Restaurant   |   \ud83d\udd12 Fri\u00b7Sat\u00b7Sun = No Off`
+    : `${legend.am}   |   ${legend.pm}   |   \ud83d\udd12 Fri\u00b7Sat\u00b7Sun = No Off`;
+  doc.text(legendLine, 40, 76);
 
   const head = [['Position', 'Name', ...DAYS.map(d =>
-    WEEKEND_DAYS.includes(d) ? `${d.slice(0, 3)} 🔒` : d.slice(0, 3)
+    WEEKEND_DAYS.includes(d) ? `${d.slice(0, 3)} \ud83d\udd12` : d.slice(0, 3)
   )]];
 
   const body = [];
   const cellStyles = [];
 
-  POSITIONS.forEach(pos => {
+  // Group by whatever positions are actually present on this roster,
+  // ordered via the canonical DEPARTMENT_POSITIONS lists when a position
+  // is recognized (any position not in a known list still renders, just
+  // grouped after the known ones, rather than being silently dropped).
+  const presentPositions = [...new Set(staff.map(s => s.position))];
+  const orderedPositions = [
+    ...ALL_KNOWN_POSITIONS.filter(p => presentPositions.includes(p)),
+    ...presentPositions.filter(p => !ALL_KNOWN_POSITIONS.includes(p)),
+  ];
+
+  orderedPositions.forEach(pos => {
     const members = staff.filter(s => s.position === pos);
     if (!members.length) return;
+    const headerFill = hexToRgb((POSITION_COLORS[pos] || {}).border) || FALLBACK_HEADER_FILL;
 
     members.forEach((s, idx) => {
       const row = [
         idx === 0 ? pos : '',
         s.name,
-        ...DAYS.map(d => cellLabel(roster[s.id]?.[d])),
+        ...DAYS.map(d => cellLabel(roster[s.id]?.[d], legend.showOutlet)),
       ];
       body.push(row);
 
       const rowCellStyles = {};
       if (idx === 0) {
-        rowCellStyles[0] = { fillColor: POSITION_HEADER_FILL[pos], textColor: [15, 23, 42], fontStyle: 'bold' };
+        rowCellStyles[0] = { fillColor: headerFill, textColor: [15, 23, 42], fontStyle: 'bold' };
       }
       DAYS.forEach((d, i) => {
         const cell = roster[s.id]?.[d];
@@ -130,4 +156,3 @@ export function exportPDF(staff, roster, weekLabel) {
 
   doc.save(`roster-${weekLabel.replace(/\s/g, '_')}.pdf`);
 }
-

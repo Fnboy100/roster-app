@@ -12,6 +12,21 @@ export async function createRosterStaff(payload) {
   return data;
 }
 
+/** PATCH /roster/staff/{id} -> RosterStaffOut. payload: { full_name?, position? }. Fixes a mistake in place — e.g. wrong position. */
+export async function updateRosterStaff(staffId, payload) {
+  const { data } = await client.patch(`/roster/staff/${staffId}`, payload);
+  return data;
+}
+
+/**
+ * DELETE /roster/staff/{id} -> { id, deleted, message }. Actually deletes
+ * if nothing references them yet; otherwise deactivates and says so.
+ */
+export async function deleteRosterStaff(staffId) {
+  const { data } = await client.delete(`/roster/staff/${staffId}`);
+  return data;
+}
+
 /**
  * POST /roster/periods -> RosterPeriodOut. Submits a client-generated roster for approval.
  * payload: { department_id?, week_start, week_end, week_label, rules_snapshot?,

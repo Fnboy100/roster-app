@@ -14,15 +14,45 @@ export const OUTLET_LABELS = {
   RST:  "RST",
 };
 
+// Departments that use the legacy AM/PM/Off + outlet system (Bar,
+// Stewarding, Store, ...) don't all mean the same thing by "AM"/"PM", and
+// not all of them use outlet tags at all. This is display-only — the
+// underlying cell value is always { shift: "AM"|"PM"|"Off", outlet } for
+// every one of them, so nothing about generateRoster.js/RosterTable's
+// core logic branches on department; only the legend text shown (in the
+// UI and in PDF/CSV exports) and whether the outlet picker appears at
+// all change per department. Departments not listed here fall back to
+// the Bar-style default.
+export const DEPARTMENT_SHIFT_LEGEND = {
+  STEWARDING: {
+    am: "AM = 8:00 AM \u2013 6:00 PM (Morning)",
+    pm: "PM = 5:00 PM \u2013 Close (Night \u2014 cleanup can run past midnight, until the last guest leaves)",
+    showOutlet: false,
+  },
+};
+const DEFAULT_SHIFT_LEGEND = {
+  am: "AM = 11am\u20136pm",
+  pm: "PM = 4pm\u201312am",
+  showOutlet: true,
+};
+
+export function shiftLegendForDepartment(departmentCode) {
+  return DEPARTMENT_SHIFT_LEGEND[departmentCode] || DEFAULT_SHIFT_LEGEND;
+}
+
+export function departmentShowsOutlet(departmentCode) {
+  return shiftLegendForDepartment(departmentCode).showOutlet;
+}
+
 // A full shift cell value is: { shift: "AM"|"PM"|"Off", outlet: "none"|"T"|"RST" }
 // Helpers
 export function makeCell(shift = "Off", outlet = "none") {
   return { shift, outlet };
 }
 
-export function cellLabel(cell) {
+export function cellLabel(cell, showOutlet = true) {
   if (!cell || cell.shift === "Off") return "Off";
-  if (!cell.outlet || cell.outlet === "none") return cell.shift;
+  if (!showOutlet || !cell.outlet || cell.outlet === "none") return cell.shift;
   return `${cell.shift} <${cell.outlet}>`;
 }
 
@@ -100,7 +130,7 @@ export const DEPARTMENT_POSITIONS = {
   BAR:         ["Supervisor", "Bartender", "Barback"],
   KITCHEN:     ["Hot Section", "Salad & Dessert", "Bakery", "Chinese Section", "Sushi Section", "Butcher"],
   FLOOR:       ["Floor Supervisor", "Butler", "Waiter", "Host", "Runner", "Cashier", "CRM Officer", "Hostess"],
-  STEWARDING:  ["Steward Supervisor", "Steward", "Dishwasher"],
+  STEWARDING:  ["Steward Supervisor", "Steward"],
   STORE:       ["Store Supervisor", "Storekeeper", "Store Assistant"],
 };
 

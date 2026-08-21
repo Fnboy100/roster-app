@@ -1,56 +1,75 @@
-fix(frontend): route Floor/Kitchen export through the backend's normalized roster; add Kitchen to the engine
+fix(frontend): add always-visible staff edit/delete; customize Stewarding's roster format
 
-Floor's PDF export was rendering empty tables and its CSV was missing
-hours/totals/variance entirely — root cause was two hardcoded,
-Bar-specific constants in utils/exportPDF.js/exportCSV.js and a lossy
-client-side roster mapping that dropped shift_code/hours before export
-ever saw them (see the backend commit for the full root-cause writeup).
-Rather than patch those constants for Floor specifically, engine-managed
-departments now export through the new backend endpoint that reads the
-exact same normalized rows the on-screen table does; Bar/Stewarding/
-Store keep their original, completely untouched exportCSV.js/exportPDF.js
-path.
+Two changes, both from the same underlying report: a staff member added
+under the wrong position had no way to be fixed short of the database,
+and Stewarding needed Bar's roster format with different shift times
+and no outlet tag.
 
-- api/rosterEngine.js: new exportRoster(periodId, format) — GET
-  /roster/engine/periods/{id}/export?format=csv|pdf as a blob download,
-  same pattern already used for presence-violation CSV export. Reads
-  the real filename from the response's Content-Disposition header
-  instead of hardcoding one. Also new getNormalizedRoster(periodId) for
-  anything that wants the same rows without triggering a file download.
+STAFF EDIT/DELETE
+- components/StaffManagementPanel.jsx (new): a staff list that's always
+  visible — not gated behind generating a roster first, unlike the old
+  in-table delete button, which also only ever existed in edit mode on
+  a fresh draft. Inline Edit (name + position dropdown, Save disabled
+  until something actually changed) and Remove (confirm inline, then
+  calls the new delete endpoint and surfaces whether the person was
+  actually removed or deactivated — they have existing roster history).
+- api/roster.js: updateRosterStaff(id, payload), deleteRosterStaff(id).
+- pages/RosterApp.jsx: handleUpdateStaff/handleDeleteStaff, both
+  reloading the staff list from the backend on success so the UI never
+  drifts from what's actually stored. StaffManagementPanel renders
+  right under AddStaffForm. The old RosterTable in-table delete button
+  is now wired to the real handler too (previously onRemove={() => {}},
+  a literal no-op) with a window.confirm guard, since unlike the new
+  panel it never had its own confirmation step.
 
-- pages/RosterApp.jsx:
-  - CSV/PDF buttons now branch: isEngine departments call the new
-    handleExport('csv'|'pdf') (backend-normalized download, works
-    identically for a roster generated this session or reloaded from a
-    save), everything else calls the original exportCSV/exportPDF
-    unchanged.
-  - new `exporting` state disables the button and shows "Exporting…"
-    while a download is in flight, and surfaces a real error message on
-    failure instead of failing silently.
-  - the one hardcoded "Floor roster" empty-state string now reads
-    "Kitchen roster" when the department code is KITCHEN.
-
+STEWARDING FORMAT (Bar's system, retimed, no outlet)
 - data/constants.js:
-  - ENGINE_DEPARTMENT_CODES: added "KITCHEN" — the only line that makes
-    Kitchen use the backend scheduling engine instead of the client-side
-    generator; FloorRosterTable, ValidationPanel, and
-    FloorSettingsPanel needed zero changes to work for Kitchen, since
-    none of them contained Floor-specific logic to begin with (updated
-    their doc comments to say so, no behavior changed).
-  - DEPARTMENT_POSITIONS.KITCHEN: replaced the placeholder role list
-    ("Kitchen Supervisor"/"Head Chef"/"Sous Chef"/"Line Cook"/"Kitchen
-    Porter") with the six sections from the Arami Kitchen Schedule
-    reference image — Hot Section, Salad & Dessert, Bakery, Chinese
-    Section, Sushi Section, Butcher — matching what the backend's
-    Kitchen coverage-rule catalog actually seeds. Any existing Kitchen
-    staff record using the old position names will need updating to one
-    of the new section names, or the backend's new role-assignment
-    validation check will flag it rather than silently misscheduling
-    them.
-  - POSITION_COLORS: updated the Kitchen color block's keys to match
-    the new section names (same red/orange family, plus a new
-    magenta/purple entry for Sushi Section).
+  - DEPARTMENT_POSITIONS.STEWARDING simplified to exactly
+    ["Steward Supervisor", "Steward"] (was going to include
+    "Dishwasher" — dropped per the request that it's just these two).
+  - DEPARTMENT_SHIFT_LEGEND (new) + shiftLegendForDepartment()/
+    departmentShowsOutlet(): department-keyed legend text and an
+    outlet on/off flag. Stewarding: AM = 8:00 AM–6:00 PM (Morning),
+    PM = 5:00 PM–Close (Night — cleanup can run past midnight),
+    showOutlet: false. Everything else falls back to Bar's existing
+    11am–6pm/4pm–12am text with outlet tags on — this is display-only,
+    the underlying cell value is still always { shift: "AM"|"PM"|"Off",
+    outlet } for every department, so generateRoster.js needed no
+    changes at all.
+  - cellLabel(cell, showOutlet) — new second param, defaults to true
+    (existing callers unaffected); false drops the "<T>"/"<RST>" suffix.
 
-No new routes were added — exports still trigger from the existing
-roster page; Kitchen reuses every roster-engine component Floor already
-had.
+- components/ShiftBadge.jsx, RosterTable.jsx, RulesPanel.jsx,
+  StatsBar.jsx: each takes a new showOutlet prop (default true) that
+  hides the outlet badge/picker/column/counts entirely when false,
+  threaded down from RosterApp.jsx's showOutlet =
+  departmentShowsOutlet(currentDepartmentCode).
+
+- pages/RosterApp.jsx: new showOutlet derivation, passed to every
+  component above; a useEffect resets rules.defaultOutlet back to
+  "none" whenever showOutlet goes false, so switching from a
+  department that was using outlet tags into Stewarding mid-session
+  can't leave a stale outlet setting the (now-hidden) picker can't
+  reach anymore.
+
+- utils/exportPDF.js, exportCSV.js: while wiring these through for
+  Stewarding, found the same bug that originally broke Floor's
+  PDF export — a hardcoded Bar-only position list, so any other
+  department's staff matched nothing and the table came out empty.
+  Fixed genericalAly rather than special-cased for Stewarding:
+  - Position grouping now derives from whoever's actually on the
+    roster (ordered via DEPARTMENT_POSITIONS when recognized), not a
+    fixed list — works for any department, present or future.
+  - Row/header colors now read from the shared POSITION_COLORS palette
+    instead of a separate hardcoded PDF-only color map.
+  - Both take an optional departmentCode param: shows that
+    department's legend text and omits outlet tags/columns when
+    showOutlet is false.
+  - exportCSV.js also now escapes commas/quotes/newlines properly
+    (was a plain .join(',') that silently corrupted any name
+    containing a comma) and writes UTF-8 with a BOM so Excel opens it
+    correctly.
+  - RosterApp.jsx passes currentDepartmentCode into both export calls.
+
+No new routes; Steward uses the exact same /roster page and endpoints
+Bar always has.

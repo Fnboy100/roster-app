@@ -8,12 +8,14 @@ import { SHIFTS, OUTLETS, OUTLET_LABELS, SHIFT_STYLES, OUTLET_BADGE_STYLES, cell
  * In edit mode  → two dropdowns: one for shift (AM/PM/Off), one for outlet (none/T/RST)
  *
  * Props:
- *  value    → { shift, outlet }
- *  editable → boolean
- *  locked   → boolean (weekends: hide Off option)
- *  onChange → (newCell: { shift, outlet }) => void
+ *  value       → { shift, outlet }
+ *  editable    → boolean
+ *  locked      → boolean (weekends: hide Off option)
+ *  showOutlet  → boolean, default true — false hides the outlet badge/picker
+ *                entirely (e.g. Stewarding, which doesn't use outlet tags)
+ *  onChange    → (newCell: { shift, outlet }) => void
  */
-export default function ShiftBadge({ value, editable, locked, onChange }) {
+export default function ShiftBadge({ value, editable, locked, showOutlet = true, onChange }) {
   const cell       = value || makeCell('Off', 'none');
   const shiftStyle = SHIFT_STYLES[cell.shift] || SHIFT_STYLES['Off'];
   const outletStyle = OUTLET_BADGE_STYLES[cell.outlet] || OUTLET_BADGE_STYLES['none'];
@@ -30,7 +32,7 @@ export default function ShiftBadge({ value, editable, locked, onChange }) {
         }}>
           {cell.shift}
         </span>
-        {cell.shift !== 'Off' && cell.outlet !== 'none' && (
+        {showOutlet && cell.shift !== 'Off' && cell.outlet !== 'none' && (
           <span style={{
             padding: '2px 6px', borderRadius: 5, fontSize: 10, fontWeight: 700,
             background: outletStyle.bg, color: outletStyle.text, border: `1.5px solid ${outletStyle.border}`,
@@ -53,14 +55,14 @@ export default function ShiftBadge({ value, editable, locked, onChange }) {
       {/* Shift dropdown */}
       <select
         value={cell.shift}
-        onChange={e => onChange(makeCell(e.target.value, e.target.value === 'Off' ? 'none' : cell.outlet))}
+        onChange={e => onChange(makeCell(e.target.value, e.target.value === 'Off' ? 'none' : (showOutlet ? cell.outlet : 'none')))}
         style={{ ...dropBase, background: shiftStyle.bg, color: shiftStyle.text, borderColor: shiftStyle.border }}
       >
         {availableShifts.map(s => <option key={s} value={s}>{s}</option>)}
       </select>
 
-      {/* Outlet dropdown — only visible when not Off */}
-      {cell.shift !== 'Off' && (
+      {/* Outlet dropdown — only visible when not Off and this department uses outlet tags */}
+      {showOutlet && cell.shift !== 'Off' && (
         <select
           value={cell.outlet}
           onChange={e => onChange(makeCell(cell.shift, e.target.value))}

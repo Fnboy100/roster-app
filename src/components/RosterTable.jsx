@@ -10,7 +10,7 @@ import { DAYS, WEEKEND_DAYS, POSITION_COLORS, DEPARTMENT_POSITIONS, makeCell } f
 const ALL_KNOWN_POSITIONS = Object.values(DEPARTMENT_POSITIONS).flat();
 const FALLBACK_POSITION_COLOR = { bg: '#f8fafc', border: '#94a3b8', text: '#334155' };
 
-export default function RosterTable({ staff, roster, rules, editMode, onCellChange, onRemove }) {
+export default function RosterTable({ staff, roster, rules, editMode, showOutlet = true, onCellChange, onRemove }) {
   const presentPositions = [...new Set(staff.map(s => s.position))];
   const orderedPositions = [
     ...ALL_KNOWN_POSITIONS.filter(p => presentPositions.includes(p)),
@@ -74,6 +74,7 @@ export default function RosterTable({ staff, roster, rules, editMode, onCellChan
                         value={roster[s.id]?.[day] || makeCell('Off', 'none')}
                         editable={editMode}
                         locked={isWknd && rules.noOffWeekends}
+                        showOutlet={showOutlet}
                         onChange={v => onCellChange(s.id, day, v)}
                       />
                     </td>

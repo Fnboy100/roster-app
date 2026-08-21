@@ -1,6 +1,6 @@
 // ─── roster-app/src/components/RulesPanel.jsx ────────────────────────────────
 
-export default function RulesPanel({ rules, onChange }) {
+export default function RulesPanel({ rules, onChange, showOutlet = true }) {
   const inp = { padding: '6px 10px', borderRadius: 8, border: '1.5px solid #e2e8f0', fontSize: 13, color: '#0f172a' };
   const lbl = { display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13, color: '#334155', fontWeight: 600 };
 
@@ -28,24 +28,26 @@ export default function RulesPanel({ rules, onChange }) {
           No Off on Fri / Sat / Sun
         </label>
 
-        {/* ── Outlet rule ── */}
-        <label style={lbl}>
-          Auto-assign outlet tag
-          <select
-            value={rules.defaultOutlet}
-            onChange={e => onChange({ ...rules, defaultOutlet: e.target.value })}
-            style={{ ...inp, width: 150 }}
-          >
-            <option value="none">None (plain AM/PM)</option>
-            <option value="T">All → T (Terraces)</option>
-            <option value="RST">All → RST (Restaurant)</option>
-            <option value="random">Random (T or RST)</option>
-          </select>
-        </label>
+        {/* ── Outlet rule — this department doesn't use outlet tags at all ── */}
+        {showOutlet && (
+          <label style={lbl}>
+            Auto-assign outlet tag
+            <select
+              value={rules.defaultOutlet}
+              onChange={e => onChange({ ...rules, defaultOutlet: e.target.value })}
+              style={{ ...inp, width: 150 }}
+            >
+              <option value="none">None (plain AM/PM)</option>
+              <option value="T">All → T (Terraces)</option>
+              <option value="RST">All → RST (Restaurant)</option>
+              <option value="random">Random (T or RST)</option>
+            </select>
+          </label>
+        )}
 
       </div>
       <div style={{ marginTop: 10, fontSize: 12, color: '#64748b' }}>
-        Changes apply on next Generate. Outlet tags can also be changed per-cell in Edit mode.
+        Changes apply on next Generate.{showOutlet ? ' Outlet tags can also be changed per-cell in Edit mode.' : ''}
       </div>
     </div>
   );

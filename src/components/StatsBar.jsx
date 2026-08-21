@@ -4,7 +4,7 @@ import { DAYS, POSITION_COLORS } from '../data/constants';
 
 const FALLBACK_POSITION_COLOR = { bg: '#f8fafc', border: '#94a3b8', text: '#334155' };
 
-export default function StatsBar({ staff, roster }) {
+export default function StatsBar({ staff, roster, showOutlet = true }) {
   return (
     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 18 }}>
       {staff.map(s => {
@@ -12,8 +12,8 @@ export default function StatsBar({ staff, roster }) {
         const pm  = DAYS.filter(d => roster[s.id]?.[d]?.shift === 'PM').length;
         const off = DAYS.filter(d => roster[s.id]?.[d]?.shift === 'Off').length;
         // Count outlet appearances
-        const tCount   = DAYS.filter(d => roster[s.id]?.[d]?.outlet === 'T').length;
-        const rstCount = DAYS.filter(d => roster[s.id]?.[d]?.outlet === 'RST').length;
+        const tCount   = showOutlet ? DAYS.filter(d => roster[s.id]?.[d]?.outlet === 'T').length : 0;
+        const rstCount = showOutlet ? DAYS.filter(d => roster[s.id]?.[d]?.outlet === 'RST').length : 0;
         const pc = POSITION_COLORS[s.position] || FALLBACK_POSITION_COLOR;
         return (
           <div key={s.id} style={{
@@ -28,7 +28,7 @@ export default function StatsBar({ staff, roster }) {
               {' · '}
               <span style={{ color: '#94a3b8' }}>Off:{off}</span>
             </div>
-            {(tCount > 0 || rstCount > 0) && (
+            {showOutlet && (tCount > 0 || rstCount > 0) && (
               <div style={{ marginTop: 2, color: '#64748b' }}>
                 {tCount > 0 && <span style={{ color: '#166534' }}>T:{tCount} </span>}
                 {rstCount > 0 && <span style={{ color: '#6b21a8' }}>RST:{rstCount}</span>}
