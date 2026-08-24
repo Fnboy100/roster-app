@@ -1,75 +1,65 @@
-fix(frontend): add always-visible staff edit/delete; customize Stewarding's roster format
+1. exportPDF.js
+--------------
+fix(frontend): align PDF export rendering with backend roster data
 
-Two changes, both from the same underlying report: a staff member added
-under the wrong position had no way to be fixed short of the database,
-and Stewarding needed Bar's roster format with different shift times
-and no outlet tag.
+Changes:
+- Preserve Floor and Kitchen shift colors in exported PDFs.
+- Use corrected table width and margin behavior.
+- Prevent Steward lock-marker corruption.
+- Prevent Steward legend overflow.
+- Display department names prominently in exported reports.
 
-STAFF EDIT/DELETE
-- components/StaffManagementPanel.jsx (new): a staff list that's always
-  visible — not gated behind generating a roster first, unlike the old
-  in-table delete button, which also only ever existed in edit mode on
-  a fresh draft. Inline Edit (name + position dropdown, Save disabled
-  until something actually changed) and Remove (confirm inline, then
-  calls the new delete endpoint and surfaces whether the person was
-  actually removed or deactivated — they have existing roster history).
-- api/roster.js: updateRosterStaff(id, payload), deleteRosterStaff(id).
-- pages/RosterApp.jsx: handleUpdateStaff/handleDeleteStaff, both
-  reloading the staff list from the backend on success so the UI never
-  drifts from what's actually stored. StaffManagementPanel renders
-  right under AddStaffForm. The old RosterTable in-table delete button
-  is now wired to the real handler too (previously onRemove={() => {}},
-  a literal no-op) with a window.confirm guard, since unlike the new
-  panel it never had its own confirmation step.
 
-STEWARDING FORMAT (Bar's system, retimed, no outlet)
-- data/constants.js:
-  - DEPARTMENT_POSITIONS.STEWARDING simplified to exactly
-    ["Steward Supervisor", "Steward"] (was going to include
-    "Dishwasher" — dropped per the request that it's just these two).
-  - DEPARTMENT_SHIFT_LEGEND (new) + shiftLegendForDepartment()/
-    departmentShowsOutlet(): department-keyed legend text and an
-    outlet on/off flag. Stewarding: AM = 8:00 AM–6:00 PM (Morning),
-    PM = 5:00 PM–Close (Night — cleanup can run past midnight),
-    showOutlet: false. Everything else falls back to Bar's existing
-    11am–6pm/4pm–12am text with outlet tags on — this is display-only,
-    the underlying cell value is still always { shift: "AM"|"PM"|"Off",
-    outlet } for every department, so generateRoster.js needed no
-    changes at all.
-  - cellLabel(cell, showOutlet) — new second param, defaults to true
-    (existing callers unaffected); false drops the "<T>"/"<RST>" suffix.
+2. Roster/CSV export integration
+--------------------------------
+feat(frontend): include department and week metadata in roster CSV exports
 
-- components/ShiftBadge.jsx, RosterTable.jsx, RulesPanel.jsx,
-  StatsBar.jsx: each takes a new showOutlet prop (default true) that
-  hides the outlet badge/picker/column/counts entirely when false,
-  threaded down from RosterApp.jsx's showOutlet =
-  departmentShowsOutlet(currentDepartmentCode).
+Changes:
+- Consume backend CSV output containing department/week title blocks.
+- Preserve roster rows and shift data.
+- Keep export controls consistent with the roster screen.
 
-- pages/RosterApp.jsx: new showOutlet derivation, passed to every
-  component above; a useEffect resets rules.defaultOutlet back to
-  "none" whenever showOutlet goes false, so switching from a
-  department that was using outlet tags into Stewarding mid-session
-  can't leave a stale outlet setting the (now-hidden) picker can't
-  reach anymore.
 
-- utils/exportPDF.js, exportCSV.js: while wiring these through for
-  Stewarding, found the same bug that originally broke Floor's
-  PDF export — a hardcoded Bar-only position list, so any other
-  department's staff matched nothing and the table came out empty.
-  Fixed genericalAly rather than special-cased for Stewarding:
-  - Position grouping now derives from whoever's actually on the
-    roster (ordered via DEPARTMENT_POSITIONS when recognized), not a
-    fixed list — works for any department, present or future.
-  - Row/header colors now read from the shared POSITION_COLORS palette
-    instead of a separate hardcoded PDF-only color map.
-  - Both take an optional departmentCode param: shows that
-    department's legend text and omits outlet tags/columns when
-    showOutlet is false.
-  - exportCSV.js also now escapes commas/quotes/newlines properly
-    (was a plain .join(',') that silently corrupted any name
-    containing a comma) and writes UTF-8 with a BOM so Excel opens it
-    correctly.
-  - RosterApp.jsx passes currentDepartmentCode into both export calls.
+3. Presence report export controls
+----------------------------------
+feat(frontend): add presence report PDF and CSV export controls
 
-No new routes; Steward uses the exact same /roster page and endpoints
-Bar always has.
+Changes:
+- Add PDF export option to presence reports.
+- Add CSV export option to presence reports.
+- Use the same format=query convention for both formats.
+- Delegate violation filtering to the backend instead of duplicating it in UI.
+
+
+4. Staff PIN first-use flow
+---------------------------
+feat(frontend): add first-use staff PIN creation flow
+
+Changes:
+- Add first-time PIN creation UI.
+- Support shared-tablet staff PIN setup.
+- Display clear success and failure messages based on backend responses.
+- Do not display or log plaintext passwords or PINs.
+
+
+5. Forgot-PIN flow
+------------------
+feat(frontend): add secure forgot-PIN reset flow
+
+Changes:
+- Add forgot-PIN initiation.
+- Add step-up password confirmation.
+- Handle successful and failed backend status codes correctly.
+- Prevent plaintext PIN/password logging or display.
+- Do not rely on frontend validation as the security control.
+
+
+6. Report preview and export consistency
+----------------------------------------
+style(frontend): standardize department report naming and export controls
+
+Changes:
+- Use consistent department naming.
+- Align export controls with existing roster UI conventions.
+- Maintain consistent department color conventions across report previews
+  and export controls.

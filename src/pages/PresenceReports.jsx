@@ -31,7 +31,7 @@ export default function PresenceReports() {
   const [statusFilter, setStatusFilter] = useState('');
   const [violations, setViolations] = useState([]);
   const [error, setError] = useState('');
-  const [exporting, setExporting] = useState(false);
+  const [exporting, setExporting] = useState(null);
 
   useEffect(() => {
     if (isMultiOutlet) outletsApi.listOutlets().then(setOutlets).catch(() => {});
@@ -65,19 +65,20 @@ export default function PresenceReports() {
     }
   };
 
-  const handleExport = async () => {
-    setExporting(true);
+  const handleExport = async (format) => {
+    setExporting(format);
     try {
-      await presenceApi.exportViolationsCSV({
+      await presenceApi.exportViolations({
         outletId: outletId ? Number(outletId) : undefined,
         dateFrom: dateFrom ? `${dateFrom}T00:00:00Z` : undefined,
         dateTo: dateTo ? `${dateTo}T23:59:59Z` : undefined,
         status: statusFilter || undefined,
+        format,
       });
     } catch (err) {
-      setError(apiErrorMessage(err, 'Could not export the CSV.'));
+      setError(apiErrorMessage(err, `Could not export the ${format.toUpperCase()}.`));
     } finally {
-      setExporting(false);
+      setExporting(null);
     }
   };
 
@@ -88,9 +89,14 @@ export default function PresenceReports() {
           <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 2, color: '#94a3b8', textTransform: 'uppercase', marginBottom: 2 }}>Presence</div>
           <h1 style={{ fontSize: 24, fontWeight: 800, color: '#0f172a' }}>Presence Reports</h1>
         </div>
-        <button style={btn(exporting ? '#94a3b8' : '#0f172a', '#fff')} disabled={exporting} onClick={handleExport}>
-          {exporting ? 'Exporting…' : 'Export CSV'}
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button style={btn(exporting === 'csv' ? '#94a3b8' : '#0f172a', '#fff')} disabled={!!exporting} onClick={() => handleExport('csv')}>
+            {exporting === 'csv' ? 'Exporting…' : '\u2193 CSV'}
+          </button>
+          <button style={btn(exporting === 'pdf' ? '#94a3b8' : '#b91c1c', '#fff')} disabled={!!exporting} onClick={() => handleExport('pdf')}>
+            {exporting === 'pdf' ? 'Exporting…' : '\u2193 PDF'}
+          </button>
+        </div>
       </div>
 
       <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 20 }}>

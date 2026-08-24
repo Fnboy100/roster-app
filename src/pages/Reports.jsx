@@ -85,12 +85,11 @@ export default function Reports() {
   // active when they did — separate from the generation timestamp, which
   // exportReportPDF stamps itself using the actual export moment.
   const generatedBy = user ? `${user.full_name} (${user.email})` : 'Unknown user';
+  const reportDepartmentName = isMultiDept
+    ? departments.find((d) => d.id === departmentId)?.name || 'All Departments'
+    : user?.department?.name;
   const filtersLabel = (() => {
     const parts = [];
-    const deptName = isMultiDept
-      ? departments.find((d) => d.id === departmentId)?.name || 'All departments'
-      : user?.department?.name;
-    if (deptName) parts.push(`Department: ${deptName}`);
     parts.push(`From: ${dateFrom || 'earliest'}`);
     parts.push(`To: ${dateTo || 'latest'}`);
     return parts.join('   \u00b7   ');
@@ -103,6 +102,7 @@ export default function Reports() {
         columns: ['Movement Type', 'Total Quantity', 'Movement Count'],
         rows: movements.map((m) => [m.movement_type, formatQty(m.total_quantity), String(m.movement_count)]),
         generatedBy,
+        department: reportDepartmentName,
         filtersLabel,
       });
     } else if (key === 'requisitions') {
@@ -111,6 +111,7 @@ export default function Reports() {
         columns: ['Status', 'Count'],
         rows: requisitionStatuses.map((r) => [r.status, String(r.count)]),
         generatedBy,
+        department: reportDepartmentName,
         filtersLabel,
       });
     } else if (key === 'wastage') {
@@ -127,6 +128,7 @@ export default function Reports() {
           formatDateTime(w.created_at),
         ]),
         generatedBy,
+        department: reportDepartmentName,
         filtersLabel,
       });
     }

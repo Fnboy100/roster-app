@@ -7,17 +7,26 @@
  *
  * Usage:
  *   import { exportPDF } from './utils/exportPDF';
- *   exportPDF(staff, roster, weekLabel, departmentCode);
+ *   exportPDF(staff, roster, weekLabel, departmentCode, departmentName);
  *
- * `departmentCode` is optional (defaults to the Bar-style legend/outlet
- * behavior this file always had) — passing e.g. "STEWARDING" switches the
- * AM/PM legend text and hides outlet tags entirely, per
- * DEPARTMENT_SHIFT_LEGEND in data/constants.js. Position grouping is
- * derived from the staff actually present (ordered via
- * DEPARTMENT_POSITIONS when possible) rather than a hardcoded list — this
- * is what previously made this file only work correctly for Bar: with a
- * fixed Bar-only position list, no other department's staff ever matched
- * a group, so the table came out empty.
+ * `departmentCode` (optional) switches the AM/PM legend text and outlet
+ * visibility per DEPARTMENT_SHIFT_LEGEND in data/constants.js.
+ * `departmentName` (optional, falls back to departmentCode or "Roster")
+ * is what's printed as the large bold title at the top of the page —
+ * every export must lead with the department name, per this feature's
+ * requirements.
+ *
+ * Two defects fixed here that were specific to this file:
+ *   1. The day-header lock emoji (🔒) was embedded directly in doc.text()
+ *      calls. jsPDF's built-in Helvetica font can't render that Unicode
+ *      codepoint and silently substitutes garbled characters instead
+ *      (visible as "Ø=Ý" in a broken export) — replaced with a plain
+ *      ASCII marker.
+ *   2. The AM/PM legend line was drawn with a single doc.text() call and
+ *      no width check, so a longer legend (e.g. Stewarding's) ran off
+ *      the right edge of the page instead of wrapping. Now wrapped with
+ *      splitTextToSize and the table's startY is computed from however
+ *      many lines that actually took, instead of a fixed offset.
  */
 
 import jsPDF from 'jspdf';
@@ -37,6 +46,7 @@ const SHIFT_TEXT = {
 
 const ALL_KNOWN_POSITIONS = Object.values(DEPARTMENT_POSITIONS).flat();
 const FALLBACK_HEADER_FILL = [148, 163, 184];
+const PAGE_MARGIN = 40;
 
 function hexToRgb(hex) {
   const clean = (hex || '').replace('#', '');
@@ -45,26 +55,42 @@ function hexToRgb(hex) {
   return [(num >> 16) & 255, (num >> 8) & 255, num & 255];
 }
 
-export function exportPDF(staff, roster, weekLabel, departmentCode) {
+export function exportPDF(staff, roster, weekLabel, departmentCode, departmentName) {
   const legend = shiftLegendForDepartment(departmentCode);
   const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const usableWidth = pageWidth - PAGE_MARGIN * 2;
+
+  // ── Department name — large and bold, always the first thing on the page ──
+  const title = (departmentName || departmentCode || 'Roster').toUpperCase();
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(20);
+  doc.setTextColor(15, 23, 42);
+  doc.text(title, PAGE_MARGIN, 44);
 
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(18);
-  doc.setTextColor(15, 23, 42);
-  doc.text('Staff Weekly Roster', 40, 44);
+  doc.setFontSize(11);
+  doc.setTextColor(71, 85, 105);
+  doc.text('Staff Weekly Roster', PAGE_MARGIN, 62);
 
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(10);
+  doc.setFontSize(9.5);
   doc.setTextColor(100, 116, 139);
-  doc.text(`Week: ${weekLabel}`, 40, 62);
+  doc.text(`Week: ${weekLabel}`, PAGE_MARGIN, 76);
+
+  // Legend — wrapped to the page width instead of a single unbounded line,
+  // and built from plain ASCII only (no emoji) so jsPDF's default font
+  // renders it correctly.
   const legendLine = legend.showOutlet
-    ? `${legend.am}   |   ${legend.pm}   |   T = Terraces   |   RST = Restaurant   |   \ud83d\udd12 Fri\u00b7Sat\u00b7Sun = No Off`
-    : `${legend.am}   |   ${legend.pm}   |   \ud83d\udd12 Fri\u00b7Sat\u00b7Sun = No Off`;
-  doc.text(legendLine, 40, 76);
+    ? `${legend.am}  |  ${legend.pm}  |  T = Terraces  |  RST = Restaurant  |  (*) Fri/Sat/Sun = No Off allowed`
+    : `${legend.am}  |  ${legend.pm}  |  (*) Fri/Sat/Sun = No Off allowed`;
+  const legendLines = doc.splitTextToSize(legendLine, usableWidth);
+  doc.text(legendLines, PAGE_MARGIN, 90);
+
+  const tableStartY = 90 + legendLines.length * 12 + 10;
 
   const head = [['Position', 'Name', ...DAYS.map(d =>
-    WEEKEND_DAYS.includes(d) ? `${d.slice(0, 3)} \ud83d\udd12` : d.slice(0, 3)
+    WEEKEND_DAYS.includes(d) ? `${d.slice(0, 3)} (*)` : d.slice(0, 3)
   )]];
 
   const body = [];
@@ -113,8 +139,10 @@ export function exportPDF(staff, roster, weekLabel, departmentCode) {
   autoTable(doc, {
     head,
     body,
-    startY: 92,
+    startY: tableStartY,
+    margin: { left: PAGE_MARGIN, right: PAGE_MARGIN },
     theme: 'grid',
+    tableWidth: usableWidth,
     styles: {
       fontSize: 8,
       cellPadding: { top: 5, bottom: 5, left: 5, right: 5 },
@@ -122,6 +150,7 @@ export function exportPDF(staff, roster, weekLabel, departmentCode) {
       halign: 'center',
       lineColor: [226, 232, 240],
       lineWidth: 0.5,
+      overflow: 'linebreak',
     },
     headStyles: {
       fillColor: [15, 23, 42],
@@ -144,15 +173,24 @@ export function exportPDF(staff, roster, weekLabel, departmentCode) {
         }
       }
     },
+    // Repeats the department title on every page of a long roster, so a
+    // multi-page export never loses context of which department it is.
+    didDrawPage() {
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(9);
+      doc.setTextColor(148, 163, 184);
+      doc.text(title, PAGE_MARGIN, doc.internal.pageSize.getHeight() - 20);
+    },
   });
 
   const pageHeight = doc.internal.pageSize.getHeight();
+  doc.setFont('helvetica', 'normal');
   doc.setFontSize(7.5);
   doc.setTextColor(148, 163, 184);
   doc.text(
     `Generated on ${new Date().toLocaleDateString('en-GB', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}`,
-    40, pageHeight - 20
+    pageWidth - PAGE_MARGIN, pageHeight - 20, { align: 'right' }
   );
 
-  doc.save(`roster-${weekLabel.replace(/\s/g, '_')}.pdf`);
+  doc.save(`roster-${title.replace(/\s/g, '_')}-${weekLabel.replace(/\s/g, '_')}.pdf`);
 }

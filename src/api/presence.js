@@ -48,6 +48,20 @@ export async function setStaffPin(rosterStaffId, pin) {
   await client.post(`/presence/roster-staff/${rosterStaffId}/pin`, { pin });
 }
 
+/** POST /presence/roster-staff/{id}/pin/self-service -> 204. Staff set their own PIN for the first time — only works while none exists yet. */
+export async function selfServiceSetPin(rosterStaffId, pin) {
+  await client.post(`/presence/roster-staff/${rosterStaffId}/pin/self-service`, { pin });
+}
+
+/**
+ * POST /presence/roster-staff/{id}/pin/reset -> 204. Forgotten-PIN reset —
+ * requires the currently logged-in device account's own password as
+ * step-up confirmation.
+ */
+export async function resetStaffPin(rosterStaffId, pin, approverPassword) {
+  await client.post(`/presence/roster-staff/${rosterStaffId}/pin/reset`, { pin, approver_password: approverPassword });
+}
+
 // --- Section device (shared tablet) -----------------------------------------
 
 /** GET /presence/section-device/staff?outlet_id=&duty_post_id=&shift_date= -> List[SectionDeviceStaffOut] */
@@ -143,16 +157,29 @@ export async function listViolations({ outletId, dateFrom, dateTo, rosterStaffId
 }
 
 /** Triggers a browser download of violations as CSV (same filters as listViolations). */
-export async function exportViolationsCSV({ outletId, dateFrom, dateTo, rosterStaffId, status } = {}) {
-  const { data } = await client.get('/presence/violations', {
-    params: { outlet_id: outletId, date_from: dateFrom, date_to: dateTo, roster_staff_id: rosterStaffId, status, format: 'csv' },
+/** GET /presence/violations?format=csv|pdf -> triggers a browser download. */
+export async function exportViolations({ outletId, dateFrom, dateTo, rosterStaffId, status, format = 'csv' } = {}) {
+  const response = await client.get('/presence/violations', {
+    params: { outlet_id: outletId, date_from: dateFrom, date_to: dateTo, roster_staff_id: rosterStaffId, status, format },
     responseType: 'blob',
   });
-  const blob = new Blob([data], { type: 'text/csv' });
+  const mimeType = format === 'pdf' ? 'application/pdf' : 'text/csv';
+  const blob = new Blob([response.data], { type: mimeType });
+
+  const disposition = response.headers?.['content-disposition'] || '';
+  const match = disposition.match(/filename="?([^"]+)"?/);
+  const filename = match ? match[1] : `presence_violations.${format}`;
+
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = 'presence_violations.csv';
+  a.download = filename;
   a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+/** @deprecated use exportViolations({ ...filters, format: 'csv' }) */
+export async function exportViolationsCSV(filters = {}) {
+  return exportViolations({ ...filters, format: 'csv' });
 }
 
 /** PATCH /presence/violations/{id} -> ViolationOut. payload: { status?, manager_notes? } */

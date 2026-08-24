@@ -35,6 +35,22 @@ export default function SectionDevice() {
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState('');
 
+  // Self-service "set my PIN" (first time — no PIN exists yet)
+  const [settingUpPin, setSettingUpPin] = useState(false);
+  const [newPin, setNewPin] = useState('');
+  const [confirmNewPin, setConfirmNewPin] = useState('');
+  const [pinSetupError, setPinSetupError] = useState('');
+  const [pinSetupBusy, setPinSetupBusy] = useState(false);
+  const [skippedPinSetup, setSkippedPinSetup] = useState(false);
+
+  // Forgot-PIN reset — requires the device operator's own password
+  const [showForgotPin, setShowForgotPin] = useState(false);
+  const [resetNewPin, setResetNewPin] = useState('');
+  const [resetConfirmPin, setResetConfirmPin] = useState('');
+  const [approverPassword, setApproverPassword] = useState('');
+  const [resetError, setResetError] = useState('');
+  const [resetBusy, setResetBusy] = useState(false);
+
   useEffect(() => {
     if (isMultiOutlet) outletsApi.listOutlets().then(setOutlets).catch(() => {});
   }, [isMultiOutlet]);
@@ -68,6 +84,16 @@ export default function SectionDevice() {
     setSelected(rosterStaffId);
     setPin('');
     setActionError('');
+    setSettingUpPin(false);
+    setNewPin('');
+    setConfirmNewPin('');
+    setPinSetupError('');
+    setSkippedPinSetup(false);
+    setShowForgotPin(false);
+    setResetNewPin('');
+    setResetConfirmPin('');
+    setApproverPassword('');
+    setResetError('');
   };
 
   const runAction = async (action) => {
@@ -88,6 +114,59 @@ export default function SectionDevice() {
       setActionError(apiErrorMessage(err, 'That action could not be completed.'));
     } finally {
       setBusy(false);
+    }
+  };
+
+  const handleSetupPin = async () => {
+    setPinSetupError('');
+    if (!/^\d{4,8}$/.test(newPin)) {
+      setPinSetupError('PIN must be 4-8 digits.');
+      return;
+    }
+    if (newPin !== confirmNewPin) {
+      setPinSetupError('PINs do not match.');
+      return;
+    }
+    setPinSetupBusy(true);
+    try {
+      await presenceApi.selfServiceSetPin(selectedStaff.roster_staff_id, newPin);
+      setSettingUpPin(false);
+      setNewPin('');
+      setConfirmNewPin('');
+      load(); // refreshes has_pin so the PIN-entry field shows up immediately
+    } catch (err) {
+      setPinSetupError(apiErrorMessage(err, 'Could not set the PIN.'));
+    } finally {
+      setPinSetupBusy(false);
+    }
+  };
+
+  const handleResetPin = async () => {
+    setResetError('');
+    if (!/^\d{4,8}$/.test(resetNewPin)) {
+      setResetError('New PIN must be 4-8 digits.');
+      return;
+    }
+    if (resetNewPin !== resetConfirmPin) {
+      setResetError('PINs do not match.');
+      return;
+    }
+    if (!approverPassword) {
+      setResetError("Enter the device's login password to approve this reset.");
+      return;
+    }
+    setResetBusy(true);
+    try {
+      await presenceApi.resetStaffPin(selectedStaff.roster_staff_id, resetNewPin, approverPassword);
+      setShowForgotPin(false);
+      setResetNewPin('');
+      setResetConfirmPin('');
+      setApproverPassword('');
+      setPin(resetNewPin); // pre-fill so they can clock in immediately with the new PIN
+    } catch (err) {
+      setResetError(apiErrorMessage(err, 'Could not reset the PIN.'));
+    } finally {
+      setResetBusy(false);
     }
   };
 
@@ -144,18 +223,103 @@ export default function SectionDevice() {
             <PresenceStatusBadge status={selectedStaff.status} />
           </div>
 
-          {selectedStaff.has_pin && (
-            <div style={{ marginBottom: 16 }}>
+          {selectedStaff.has_pin ? (
+            <div style={{ marginBottom: 12 }}>
+              {!showForgotPin ? (
+                <>
+                  <input
+                    type="password"
+                    inputMode="numeric"
+                    placeholder="Enter PIN"
+                    value={pin}
+                    onChange={(e) => setPin(e.target.value)}
+                    style={{ width: '100%', padding: '16px', fontSize: 20, textAlign: 'center', borderRadius: 12, border: '1.5px solid #e2e8f0', boxSizing: 'border-box' }}
+                  />
+                  <button
+                    onClick={() => setShowForgotPin(true)}
+                    style={{ background: 'none', border: 'none', color: '#64748b', fontSize: 12, fontWeight: 600, marginTop: 6, cursor: 'pointer', textDecoration: 'underline' }}
+                  >
+                    Forgot PIN?
+                  </button>
+                </>
+              ) : (
+                <div style={{ background: '#fef2f2', border: '1.5px solid #fecaca', borderRadius: 12, padding: 14 }}>
+                  <div style={{ fontSize: 12.5, fontWeight: 700, color: '#991b1b', marginBottom: 8 }}>
+                    Reset {selectedStaff.full_name}'s PIN
+                  </div>
+                  <div style={{ fontSize: 11.5, color: '#7f1d1d', marginBottom: 10 }}>
+                    Requires this device's own login password — a supervisor or manager must be the one approving this, right now.
+                  </div>
+                  <input
+                    type="password"
+                    inputMode="numeric"
+                    placeholder="New PIN (4-8 digits)"
+                    value={resetNewPin}
+                    onChange={(e) => setResetNewPin(e.target.value)}
+                    style={{ width: '100%', padding: '10px', fontSize: 14, textAlign: 'center', borderRadius: 8, border: '1.5px solid #e2e8f0', boxSizing: 'border-box', marginBottom: 8 }}
+                  />
+                  <input
+                    type="password"
+                    inputMode="numeric"
+                    placeholder="Confirm new PIN"
+                    value={resetConfirmPin}
+                    onChange={(e) => setResetConfirmPin(e.target.value)}
+                    style={{ width: '100%', padding: '10px', fontSize: 14, textAlign: 'center', borderRadius: 8, border: '1.5px solid #e2e8f0', boxSizing: 'border-box', marginBottom: 8 }}
+                  />
+                  <input
+                    type="password"
+                    placeholder="Your own login password"
+                    value={approverPassword}
+                    onChange={(e) => setApproverPassword(e.target.value)}
+                    style={{ width: '100%', padding: '10px', fontSize: 14, borderRadius: 8, border: '1.5px solid #e2e8f0', boxSizing: 'border-box', marginBottom: 8 }}
+                  />
+                  {resetError && <div style={{ ...errorBoxStyle, marginBottom: 8 }}>{resetError}</div>}
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button onClick={handleResetPin} disabled={resetBusy} style={{ ...btn('#b91c1c', '#fff'), flex: 1 }}>
+                      {resetBusy ? 'Resetting…' : 'Approve & Reset'}
+                    </button>
+                    <button onClick={() => setShowForgotPin(false)} disabled={resetBusy} style={btn('#f1f5f9', '#334155')}>
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : !skippedPinSetup ? (
+            <div style={{ background: '#f0fdf4', border: '1.5px solid #bbf7d0', borderRadius: 12, padding: 14, marginBottom: 12 }}>
+              <div style={{ fontSize: 12.5, fontWeight: 700, color: '#15803d', marginBottom: 4 }}>
+                Set up a PIN
+              </div>
+              <div style={{ fontSize: 11.5, color: '#166534', marginBottom: 10 }}>
+                A PIN confirms it's really you clocking in — recommended, especially during a rush when tiles get tapped fast.
+              </div>
               <input
                 type="password"
                 inputMode="numeric"
-                placeholder="Enter PIN"
-                value={pin}
-                onChange={(e) => setPin(e.target.value)}
-                style={{ width: '100%', padding: '16px', fontSize: 20, textAlign: 'center', borderRadius: 12, border: '1.5px solid #e2e8f0', boxSizing: 'border-box' }}
+                placeholder="Choose a PIN (4-8 digits)"
+                value={newPin}
+                onChange={(e) => setNewPin(e.target.value)}
+                style={{ width: '100%', padding: '10px', fontSize: 14, textAlign: 'center', borderRadius: 8, border: '1.5px solid #e2e8f0', boxSizing: 'border-box', marginBottom: 8 }}
               />
+              <input
+                type="password"
+                inputMode="numeric"
+                placeholder="Confirm PIN"
+                value={confirmNewPin}
+                onChange={(e) => setConfirmNewPin(e.target.value)}
+                style={{ width: '100%', padding: '10px', fontSize: 14, textAlign: 'center', borderRadius: 8, border: '1.5px solid #e2e8f0', boxSizing: 'border-box', marginBottom: 8 }}
+              />
+              {pinSetupError && <div style={{ ...errorBoxStyle, marginBottom: 8 }}>{pinSetupError}</div>}
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={handleSetupPin} disabled={pinSetupBusy} style={{ ...btn('#16a34a', '#fff'), flex: 1 }}>
+                  {pinSetupBusy ? 'Saving…' : 'Save PIN'}
+                </button>
+                <button onClick={() => setSkippedPinSetup(true)} disabled={pinSetupBusy} style={btn('#f1f5f9', '#334155')}>
+                  Skip
+                </button>
+              </div>
             </div>
-          )}
+          ) : null}
 
           {actionError && <div style={errorBoxStyle}>{actionError}</div>}
 

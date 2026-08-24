@@ -84,6 +84,9 @@ export default function RosterApp() {
   const currentDepartmentCode = isMultiDept
     ? departments.find((d) => d.id === effectiveDepartmentId)?.code
     : user?.department?.code;
+  const currentDepartmentName = isMultiDept
+    ? departments.find((d) => d.id === effectiveDepartmentId)?.name
+    : user?.department?.name;
   const availablePositions = positionsForDepartment(currentDepartmentCode);
   const isEngine = isEngineDepartment(currentDepartmentCode);
   const showOutlet = departmentShowsOutlet(currentDepartmentCode); // false for departments like Stewarding that don't use outlet tags
@@ -458,14 +461,14 @@ export default function RosterApp() {
             {period?.status === 'approved' && !isDraft && (
               <>
                 <button
-                  onClick={() => (isEngine ? handleExport('csv') : exportCSV(staff, roster, week.label, currentDepartmentCode))}
+                  onClick={() => (isEngine ? handleExport('csv') : exportCSV(staff, roster, week.label, currentDepartmentCode, currentDepartmentName))}
                   disabled={exporting === 'csv'}
                   style={btn('#16a34a', '#fff')}
                 >
                   &#8595; {exporting === 'csv' ? 'Exporting…' : 'CSV'}
                 </button>
                 <button
-                  onClick={() => (isEngine ? handleExport('pdf') : exportPDF(staff, roster, week.label, currentDepartmentCode))}
+                  onClick={() => (isEngine ? handleExport('pdf') : exportPDF(staff, roster, week.label, currentDepartmentCode, currentDepartmentName))}
                   disabled={exporting === 'pdf'}
                   style={btn('#dc2626', '#fff')}
                 >
