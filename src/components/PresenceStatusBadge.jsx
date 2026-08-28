@@ -4,6 +4,7 @@ import { PRESENCE_STATUS_LABELS } from '../api/presence';
 const STATUS_TONE = {
   off_duty: 'slate',
   on_shift_at_post: 'green',
+  on_shift_away_from_post: 'amber',
   on_shift_on_break: 'amber',
   unknown: 'red',
 };

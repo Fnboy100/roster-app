@@ -26,7 +26,7 @@ export const OUTLET_LABELS = {
 export const DEPARTMENT_SHIFT_LEGEND = {
   STEWARDING: {
     am: "AM = 8:00 AM \u2013 6:00 PM (Morning)",
-    pm: "PM = 5:00 PM \u2013 Close (Night \u2014 cleanup can run past midnight, until the last guest leaves)",
+    pm: "PM = 5:00 PM \u2013 Close (Night)",
     showOutlet: false,
   },
 };

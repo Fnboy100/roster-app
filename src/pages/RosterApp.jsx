@@ -293,7 +293,10 @@ export default function RosterApp() {
       // session or is being reopened from a saved state — the backend
       // reloads and normalizes it fresh either way (see
       // app/services/roster_engine/service.py:export_roster).
-      await rosterEngineApi.exportRoster(period.id, format);
+      await rosterEngineApi.exportRoster(
+        period.id, format,
+        `${(currentDepartmentName || currentDepartmentCode || 'roster').replace(/\s+/g, '_')}-${week.label.replace(/\s+/g, '_')}`
+      );
     } catch (err) {
       setError(apiErrorMessage(err, `Could not export the ${format.toUpperCase()}.`));
     } finally {
@@ -461,14 +464,14 @@ export default function RosterApp() {
             {period?.status === 'approved' && !isDraft && (
               <>
                 <button
-                  onClick={() => (isEngine ? handleExport('csv') : exportCSV(staff, roster, week.label, currentDepartmentCode, currentDepartmentName))}
+                  onClick={() => (isEngine ? handleExport('csv') : exportCSV(staff, roster, week.label, currentDepartmentCode, currentDepartmentName, period?.rules_snapshot || rules))}
                   disabled={exporting === 'csv'}
                   style={btn('#16a34a', '#fff')}
                 >
                   &#8595; {exporting === 'csv' ? 'Exporting…' : 'CSV'}
                 </button>
                 <button
-                  onClick={() => (isEngine ? handleExport('pdf') : exportPDF(staff, roster, week.label, currentDepartmentCode, currentDepartmentName))}
+                  onClick={() => (isEngine ? handleExport('pdf') : exportPDF(staff, roster, week.label, currentDepartmentCode, currentDepartmentName, period?.rules_snapshot || rules))}
                   disabled={exporting === 'pdf'}
                   style={btn('#dc2626', '#fff')}
                 >

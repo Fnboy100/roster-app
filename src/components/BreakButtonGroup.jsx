@@ -32,6 +32,25 @@ export default function BreakButtonGroup({ status, onAction, busy, showPostCheck
     );
   }
 
+  // Stepped away from post (but still on shift, not on a formal break) —
+  // the only sensible next actions are returning to post or clocking out
+  // entirely. Showing "Check Out from Post" here too (as the old, single
+  // combined branch used to) would let someone "check out" a second time
+  // from a state where they're already away — which is exactly what made
+  // the two buttons look interchangeable.
+  if (status === 'on_shift_away_from_post') {
+    return (
+      <div style={{ display: 'grid', gap: 10 }}>
+        <button style={bigBtn('#1d4ed8', '#fff')} disabled={busy} onClick={() => onAction('post_check_in')}>
+          Check In at Post
+        </button>
+        <button style={bigBtn('#b91c1c', '#fff')} disabled={busy} onClick={() => onAction('clock_out')}>
+          Clock Out
+        </button>
+      </div>
+    );
+  }
+
   // on_shift_at_post / unknown — treat as on shift so staff can always get back to a clean state.
   return (
     <div style={{ display: 'grid', gap: 10 }}>
@@ -39,14 +58,9 @@ export default function BreakButtonGroup({ status, onAction, busy, showPostCheck
         Start Break
       </button>
       {showPostCheck && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-          <button style={{ ...bigBtn('#eff6ff', '#1d4ed8'), minHeight: 56, fontSize: 14 }} disabled={busy} onClick={() => onAction('post_check_in')}>
-            Check In at Post
-          </button>
-          <button style={{ ...bigBtn('#eff6ff', '#1d4ed8'), minHeight: 56, fontSize: 14 }} disabled={busy} onClick={() => onAction('post_check_out')}>
-            Check Out from Post
-          </button>
-        </div>
+        <button style={{ ...bigBtn('#eff6ff', '#1d4ed8'), minHeight: 56, fontSize: 14 }} disabled={busy} onClick={() => onAction('post_check_out')}>
+          Check Out from Post
+        </button>
       )}
       <button style={bigBtn('#b91c1c', '#fff')} disabled={busy} onClick={() => onAction('clock_out')}>
         Clock Out

@@ -100,7 +100,20 @@ export async function getNormalizedRoster(periodId) {
  * or one reloaded from the backend, since both are the same persisted
  * period by the time this is called.
  */
-export async function exportRoster(periodId, format) {
+/**
+ * GET /roster/engine/periods/{id}/export?format=csv|pdf — triggers a
+ * browser download. Works identically for a roster generated moments ago
+ * or one reloaded from the backend, since both are the same persisted
+ * period by the time this is called.
+ *
+ * `fallbackName` (e.g. "Kitchen-Aug_24_-_30") is only used if the
+ * Content-Disposition header genuinely can't be read — normally it can
+ * (see main.py's CORS expose_headers), but a corporate proxy or gateway
+ * stripping non-standard headers is a real possibility in some
+ * deployments, and "roster.pdf" with no department/week in it is
+ * useless once two or three have piled up in a Downloads folder.
+ */
+export async function exportRoster(periodId, format, fallbackName) {
   const response = await client.get(`/roster/engine/periods/${periodId}/export`, {
     params: { format },
     responseType: 'blob',
@@ -110,7 +123,7 @@ export async function exportRoster(periodId, format) {
 
   const disposition = response.headers?.['content-disposition'] || '';
   const match = disposition.match(/filename="?([^"]+)"?/);
-  const filename = match ? match[1] : `roster.${format}`;
+  const filename = match ? match[1] : `roster-${fallbackName || 'export'}.${format}`;
 
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);

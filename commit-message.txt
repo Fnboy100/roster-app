@@ -1,65 +1,12 @@
-1. exportPDF.js
---------------
-fix(frontend): align PDF export rendering with backend roster data
+fix(pdf-download): descriptive fallback filename
+- Added fallback naming (e.g., roster-Kitchen-Aug_24_-_30.pdf)
+- Handles cases where proxy strips Content-Disposition header
 
-Changes:
-- Preserve Floor and Kitchen shift colors in exported PDFs.
-- Use corrected table width and margin behavior.
-- Prevent Steward lock-marker corruption.
-- Prevent Steward legend overflow.
-- Display department names prominently in exported reports.
+feat(ui): BreakButtonGroup renders valid actions per status
+- Rewrote rendering logic to support 5 distinct statuses
+- Prevents duplicate or invalid button display
+- Verified correct sequence (clock in → check out → check in → break → clock out)
 
-
-2. Roster/CSV export integration
---------------------------------
-feat(frontend): include department and week metadata in roster CSV exports
-
-Changes:
-- Consume backend CSV output containing department/week title blocks.
-- Preserve roster rows and shift data.
-- Keep export controls consistent with the roster screen.
-
-
-3. Presence report export controls
-----------------------------------
-feat(frontend): add presence report PDF and CSV export controls
-
-Changes:
-- Add PDF export option to presence reports.
-- Add CSV export option to presence reports.
-- Use the same format=query convention for both formats.
-- Delegate violation filtering to the backend instead of duplicating it in UI.
-
-
-4. Staff PIN first-use flow
----------------------------
-feat(frontend): add first-use staff PIN creation flow
-
-Changes:
-- Add first-time PIN creation UI.
-- Support shared-tablet staff PIN setup.
-- Display clear success and failure messages based on backend responses.
-- Do not display or log plaintext passwords or PINs.
-
-
-5. Forgot-PIN flow
-------------------
-feat(frontend): add secure forgot-PIN reset flow
-
-Changes:
-- Add forgot-PIN initiation.
-- Add step-up password confirmation.
-- Handle successful and failed backend status codes correctly.
-- Prevent plaintext PIN/password logging or display.
-- Do not rely on frontend validation as the security control.
-
-
-6. Report preview and export consistency
-----------------------------------------
-style(frontend): standardize department report naming and export controls
-
-Changes:
-- Use consistent department naming.
-- Align export controls with existing roster UI conventions.
-- Maintain consistent department color conventions across report previews
-  and export controls.
+fix(export-ui): shorten legend text
+- Updated legend to "PM = 5:00 PM – Close (Night)"
+- Ensures clarity and consistency across Steward/Bar/Store exports

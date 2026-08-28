@@ -191,6 +191,7 @@ export async function updateViolation(violationId, payload) {
 export const PRESENCE_STATUS_LABELS = {
   off_duty: 'Off duty',
   on_shift_at_post: 'On shift — at post',
+  on_shift_away_from_post: 'On shift — away from post',
   on_shift_on_break: 'On shift — on break',
   unknown: 'Unknown / No recent activity',
 };

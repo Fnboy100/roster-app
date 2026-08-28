@@ -55,8 +55,13 @@ function hexToRgb(hex) {
   return [(num >> 16) & 255, (num >> 8) & 255, num & 255];
 }
 
-export function exportPDF(staff, roster, weekLabel, departmentCode, departmentName) {
+export function exportPDF(staff, roster, weekLabel, departmentCode, departmentName, rules) {
   const legend = shiftLegendForDepartment(departmentCode);
+  // Only true when this roster was actually generated with the "No Off
+  // Fri/Sat/Sun" rule turned on — previously the weekend marker and its
+  // legend line were always shown regardless of the rule, which was
+  // actively misleading when the rule had been unticked.
+  const noOffWeekends = !!(rules && rules.noOffWeekends);
   const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
   const pageWidth = doc.internal.pageSize.getWidth();
   const usableWidth = pageWidth - PAGE_MARGIN * 2;
@@ -81,16 +86,19 @@ export function exportPDF(staff, roster, weekLabel, departmentCode, departmentNa
   // Legend — wrapped to the page width instead of a single unbounded line,
   // and built from plain ASCII only (no emoji) so jsPDF's default font
   // renders it correctly.
-  const legendLine = legend.showOutlet
-    ? `${legend.am}  |  ${legend.pm}  |  T = Terraces  |  RST = Restaurant  |  (*) Fri/Sat/Sun = No Off allowed`
-    : `${legend.am}  |  ${legend.pm}  |  (*) Fri/Sat/Sun = No Off allowed`;
+  const legendLine = [
+    legend.am,
+    legend.pm,
+    ...(legend.showOutlet ? ['T = Terraces', 'RST = Restaurant'] : []),
+    ...(noOffWeekends ? ['(*) Fri/Sat/Sun = No Off allowed'] : []),
+  ].join('  |  ');
   const legendLines = doc.splitTextToSize(legendLine, usableWidth);
   doc.text(legendLines, PAGE_MARGIN, 90);
 
   const tableStartY = 90 + legendLines.length * 12 + 10;
 
   const head = [['Position', 'Name', ...DAYS.map(d =>
-    WEEKEND_DAYS.includes(d) ? `${d.slice(0, 3)} (*)` : d.slice(0, 3)
+    noOffWeekends && WEEKEND_DAYS.includes(d) ? `${d.slice(0, 3)} (*)` : d.slice(0, 3)
   )]];
 
   const body = [];
