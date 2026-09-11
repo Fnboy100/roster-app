@@ -1,12 +1,14 @@
-fix(pdf-download): descriptive fallback filename
-- Added fallback naming (e.g., roster-Kitchen-Aug_24_-_30.pdf)
-- Handles cases where proxy strips Content-Disposition header
+feat(section-device): collect reason on post check-out/check-in
+- Checking out of post now opens a required reason field before submitting
+- Checking back in at post shows the same field but optional/skippable
+- runAction/handleAction updated to pass notes through to the API client
 
-feat(ui): BreakButtonGroup renders valid actions per status
-- Rewrote rendering logic to support 5 distinct statuses
-- Prevents duplicate or invalid button display
-- Verified correct sequence (clock in → check out → check in → break → clock out)
+feat(shift-reports): new Shift Reports page
+- Date/shift/department filters with grouped-by-department attendance and closing views
+- CSV/PDF export buttons, matching PresenceReports page conventions
+- Wired into App.jsx routing and Layout.jsx nav, gated to admin/manager/outlet_manager
 
-fix(export-ui): shorten legend text
-- Updated legend to "PM = 5:00 PM – Close (Night)"
-- Ensures clarity and consistency across Steward/Bar/Store exports
+feat(api): shift report client functions
+- getStartOfShiftReport / getEndOfShiftReport
+- exportStartOfShiftReport / exportEndOfShiftReport (CSV/PDF download)
+- SHIFT_LABELS constant

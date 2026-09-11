@@ -188,6 +188,56 @@ export async function updateViolation(violationId, payload) {
   return data;
 }
 
+// --- Shift reports (start-of-shift attendance / end-of-shift closing) -------
+
+/** GET /presence/reports/start-of-shift?outlet_id=&report_date=&shift=&department_id= -> StartOfShiftReportOut */
+export async function getStartOfShiftReport({ outletId, reportDate, shift, departmentId } = {}) {
+  const { data } = await client.get('/presence/reports/start-of-shift', {
+    params: { outlet_id: outletId, report_date: reportDate, shift, department_id: departmentId },
+  });
+  return data;
+}
+
+/** GET /presence/reports/end-of-shift?outlet_id=&report_date=&shift=&department_id= -> EndOfShiftReportOut */
+export async function getEndOfShiftReport({ outletId, reportDate, shift, departmentId } = {}) {
+  const { data } = await client.get('/presence/reports/end-of-shift', {
+    params: { outlet_id: outletId, report_date: reportDate, shift, department_id: departmentId },
+  });
+  return data;
+}
+
+function shiftReportExporter(path, defaultFilenamePrefix) {
+  return async ({ outletId, reportDate, shift, departmentId, format = 'csv' } = {}) => {
+    const response = await client.get(path, {
+      params: { outlet_id: outletId, report_date: reportDate, shift, department_id: departmentId, format },
+      responseType: 'blob',
+    });
+    const mimeType = format === 'pdf' ? 'application/pdf' : 'text/csv';
+    const blob = new Blob([response.data], { type: mimeType });
+
+    const disposition = response.headers?.['content-disposition'] || '';
+    const match = disposition.match(/filename="?([^"]+)"?/);
+    const filename = match ? match[1] : `${defaultFilenamePrefix}_${reportDate}_${shift}.${format}`;
+
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+}
+
+/** Triggers a browser download of the start-of-shift report as CSV or PDF. */
+export const exportStartOfShiftReport = shiftReportExporter('/presence/reports/start-of-shift', 'start_of_shift');
+/** Triggers a browser download of the end-of-shift report as CSV or PDF. */
+export const exportEndOfShiftReport = shiftReportExporter('/presence/reports/end-of-shift', 'end_of_shift');
+
+export const SHIFT_LABELS = {
+  AM: 'AM',
+  PM: 'PM',
+  Off: 'Off',
+};
+
 export const PRESENCE_STATUS_LABELS = {
   off_duty: 'Off duty',
   on_shift_at_post: 'On shift — at post',

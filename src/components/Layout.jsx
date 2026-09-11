@@ -29,6 +29,7 @@ const NAV_ITEMS = [
   { to: '/presence/duty-posts', label: 'Duty Posts', roles: PRESENCE_MANAGEMENT_ROLES },
   { to: '/presence/duty-roster', label: 'Duty Roster', roles: PRESENCE_MANAGEMENT_ROLES },
   { to: '/presence/reports', label: 'Presence Reports', roles: PRESENCE_MANAGEMENT_ROLES },
+  { to: '/presence/shift-reports', label: 'Shift Reports', roles: PRESENCE_MANAGEMENT_ROLES },
   { to: '/admin/outlets', label: 'Outlets', roles: [ROLES.ADMIN] },
   { to: '/admin/departments', label: 'Departments', roles: [ROLES.ADMIN] },
   { to: '/admin/items', label: 'Items', roles: [ROLES.ADMIN, ROLES.MANAGER, ROLES.OUTLET_MANAGER, ROLES.STOREKEEPER] },

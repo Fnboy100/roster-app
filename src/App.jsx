@@ -23,6 +23,7 @@ import DutyRoster from './pages/DutyRoster';
 import SectionDevice from './pages/SectionDevice';
 import PresenceMonitor from './pages/PresenceMonitor';
 import PresenceReports from './pages/PresenceReports';
+import ShiftReports from './pages/ShiftReports';
 
 // The roster tool moved back behind login: generating/submitting a roster
 // is now role-gated (supervisor/manager/admin) and department-scoped, which
@@ -66,6 +67,7 @@ export default function App() {
             <Route path="presence/duty-roster" element={<DutyRoster />} />
             <Route path="presence/monitor" element={<PresenceMonitor />} />
             <Route path="presence/reports" element={<PresenceReports />} />
+            <Route path="presence/shift-reports" element={<ShiftReports />} />
 
             <Route path="inventory" element={<InventoryDashboard />} />
             <Route path="inventory/requisitions" element={<Requisitions />} />

@@ -35,6 +35,14 @@ export default function SectionDevice() {
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState('');
 
+  // Post check-in/check-out both collect a note before submitting —
+  // mandatory for checking OUT of post (normally a supervisor-directed
+  // reassignment, so the manager needs to know where the person went),
+  // optional for checking back IN at post.
+  const [pendingPostAction, setPendingPostAction] = useState(null); // 'post_check_in' | 'post_check_out' | null
+  const [postNote, setPostNote] = useState('');
+  const [postNoteError, setPostNoteError] = useState('');
+
   // Self-service "set my PIN" (first time — no PIN exists yet)
   const [settingUpPin, setSettingUpPin] = useState(false);
   const [newPin, setNewPin] = useState('');
@@ -94,9 +102,12 @@ export default function SectionDevice() {
     setResetConfirmPin('');
     setApproverPassword('');
     setResetError('');
+    setPendingPostAction(null);
+    setPostNote('');
+    setPostNoteError('');
   };
 
-  const runAction = async (action) => {
+  const runAction = async (action, notes) => {
     if (!selectedStaff) return;
     setActionError('');
     setBusy(true);
@@ -106,15 +117,39 @@ export default function SectionDevice() {
         pin: pin || undefined,
         dutyPostId: selectedStaff.duty_post_id || (dutyPostId ? Number(dutyPostId) : undefined),
         assignmentId: selectedStaff.assignment_id,
+        notes: notes || undefined,
       });
       setSelected(null);
       setPin('');
+      setPendingPostAction(null);
+      setPostNote('');
+      setPostNoteError('');
       load();
     } catch (err) {
       setActionError(apiErrorMessage(err, 'That action could not be completed.'));
     } finally {
       setBusy(false);
     }
+  };
+
+  // post_check_in/post_check_out are routed here first so a note can be
+  // collected; every other action runs immediately as before.
+  const handleAction = (action) => {
+    if (action === 'post_check_in' || action === 'post_check_out') {
+      setPostNote('');
+      setPostNoteError('');
+      setPendingPostAction(action);
+      return;
+    }
+    runAction(action);
+  };
+
+  const submitPostNote = () => {
+    if (pendingPostAction === 'post_check_out' && !postNote.trim()) {
+      setPostNoteError('A reason is required before checking out of post — where are you being reassigned to?');
+      return;
+    }
+    runAction(pendingPostAction, postNote.trim() || undefined);
   };
 
   const handleSetupPin = async () => {
@@ -323,7 +358,41 @@ export default function SectionDevice() {
 
           {actionError && <div style={errorBoxStyle}>{actionError}</div>}
 
-          <BreakButtonGroup status={selectedStaff.status} onAction={runAction} busy={busy} showPostCheck />
+          {pendingPostAction ? (
+            <div style={{ background: pendingPostAction === 'post_check_out' ? '#fef2f2' : '#eff6ff', border: `1.5px solid ${pendingPostAction === 'post_check_out' ? '#fecaca' : '#bfdbfe'}`, borderRadius: 12, padding: 14 }}>
+              <div style={{ fontSize: 12.5, fontWeight: 700, color: pendingPostAction === 'post_check_out' ? '#991b1b' : '#1e3a8a', marginBottom: 4 }}>
+                {pendingPostAction === 'post_check_out' ? 'Checking out of post' : 'Checking in at post'}
+              </div>
+              <div style={{ fontSize: 11.5, color: '#475569', marginBottom: 10 }}>
+                {pendingPostAction === 'post_check_out'
+                  ? 'Required: where are you being reassigned to, or why are you stepping away?'
+                  : 'Optional note (e.g. "back from supply run").'}
+              </div>
+              <textarea
+                value={postNote}
+                onChange={(e) => setPostNote(e.target.value)}
+                placeholder={pendingPostAction === 'post_check_out' ? 'e.g. Reassigned to Main Bar by supervisor' : 'Optional…'}
+                rows={3}
+                maxLength={500}
+                style={{ width: '100%', padding: 10, fontSize: 14, borderRadius: 8, border: '1.5px solid #e2e8f0', boxSizing: 'border-box', marginBottom: 8, fontFamily: 'inherit', resize: 'vertical' }}
+              />
+              {postNoteError && <div style={{ ...errorBoxStyle, marginBottom: 8 }}>{postNoteError}</div>}
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  onClick={submitPostNote}
+                  disabled={busy}
+                  style={{ ...btn(pendingPostAction === 'post_check_out' ? '#b91c1c' : '#1d4ed8', '#fff'), flex: 1 }}
+                >
+                  {busy ? 'Submitting…' : pendingPostAction === 'post_check_out' ? 'Confirm Check-Out' : 'Confirm Check-In'}
+                </button>
+                <button onClick={() => { setPendingPostAction(null); setPostNote(''); setPostNoteError(''); }} disabled={busy} style={btn('#f1f5f9', '#334155')}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <BreakButtonGroup status={selectedStaff.status} onAction={handleAction} busy={busy} showPostCheck />
+          )}
         </div>
       ) : !outletId ? (
         <div style={emptyStateStyle}>Select an outlet to see today's staff.</div>
