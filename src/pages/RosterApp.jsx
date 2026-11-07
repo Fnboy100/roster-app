@@ -4,6 +4,7 @@ import { apiErrorMessage } from '../api/client';
 import * as rosterApi from '../api/roster';
 import * as rosterEngineApi from '../api/rosterEngine';
 import * as departmentsApi from '../api/departments';
+import * as shiftTimesApi from '../api/shiftTimes';
 import { DEFAULT_RULES, DAYS, makeCell, positionsForDepartment, isEngineDepartment, departmentShowsOutlet } from '../data/constants';
 import { generateRoster } from '../utils/generateRoster';
 import { exportCSV } from '../utils/exportCSV';
@@ -20,6 +21,7 @@ import ChangeRequestsList from '../components/roster/ChangeRequestsList';
 import FloorRosterTable from '../components/roster/FloorRosterTable';
 import ValidationPanel from '../components/roster/ValidationPanel';
 import FloorSettingsPanel from '../components/roster/FloorSettingsPanel';
+import ShiftTimesPanel from '../components/roster/ShiftTimesPanel';
 
 const btn = (bg, color) => ({
   background: bg, color, border: 'none', borderRadius: 8,
@@ -28,6 +30,7 @@ const btn = (bg, color) => ({
 
 const GENERATOR_ROLES = ['admin', 'manager', 'supervisor'];
 const APPROVER_ROLES = ['admin', 'manager'];
+const SHIFT_TIME_EDITOR_ROLES = ['admin', 'manager']; // same roles the backend allows to PUT /roster/shift-times
 
 // Computes { start, end, label } for the Monday–Sunday week `offsetWeeks`
 // away from the week containing today (0 = this week, 1 = next week, -1 =
@@ -73,6 +76,7 @@ export default function RosterApp() {
   const role = user?.role?.name;
   const isGenerator = GENERATOR_ROLES.includes(role);
   const isApprover = APPROVER_ROLES.includes(role);
+  const canEditShiftTimes = SHIFT_TIME_EDITOR_ROLES.includes(role);
   const isMultiDept = role === 'admin';
 
   const [weekOffset, setWeekOffset] = useState(0); // 0 = this week, 1 = next week, -1 = last week
@@ -124,6 +128,12 @@ export default function RosterApp() {
   const [exporting, setExporting] = useState(null); // 'csv' | 'pdf' | null — which export is in flight
   const [staffNotice, setStaffNotice] = useState(''); // e.g. "X was deactivated instead of deleted — has roster history"
 
+  // Legacy AM/PM departments (Bar, Stewarding, Store, ...): the persisted
+  // AM/PM clock times from GET /roster/shift-times. null until loaded or if
+  // they couldn't be (the legend then falls back to the standard text).
+  const [shiftTimes, setShiftTimes] = useState(null);
+  const [shiftTimesStatus, setShiftTimesStatus] = useState('loading'); // 'loading' | 'ready' | 'error'
+
   useEffect(() => {
     if (!isMultiDept) return;
     departmentsApi.listDepartments({}).then(setDepartments).catch(() => {});
@@ -147,6 +157,18 @@ export default function RosterApp() {
         ]);
         setShiftTemplates(templates);
         setCoverageRules(rules);
+        setShiftTimes(null);
+      } else {
+        // Non-fatal: if this fails (e.g. backend not yet migrated) the roster
+        // itself still loads and the legend falls back to the standard text.
+        setShiftTimesStatus('loading');
+        try {
+          setShiftTimes(await shiftTimesApi.getShiftTimes({ departmentId: effectiveDepartmentId }));
+          setShiftTimesStatus('ready');
+        } catch {
+          setShiftTimes(null);
+          setShiftTimesStatus('error');
+        }
       }
 
       const periods = await rosterApi.listRosterPeriods({ departmentId: effectiveDepartmentId });
@@ -464,14 +486,14 @@ export default function RosterApp() {
             {period?.status === 'approved' && !isDraft && (
               <>
                 <button
-                  onClick={() => (isEngine ? handleExport('csv') : exportCSV(staff, roster, week.label, currentDepartmentCode, currentDepartmentName, period?.rules_snapshot || rules))}
+                  onClick={() => (isEngine ? handleExport('csv') : exportCSV(staff, roster, week.label, currentDepartmentCode, currentDepartmentName, period?.rules_snapshot || rules, shiftTimes))}
                   disabled={exporting === 'csv'}
                   style={btn('#16a34a', '#fff')}
                 >
                   &#8595; {exporting === 'csv' ? 'Exporting…' : 'CSV'}
                 </button>
                 <button
-                  onClick={() => (isEngine ? handleExport('pdf') : exportPDF(staff, roster, week.label, currentDepartmentCode, currentDepartmentName, period?.rules_snapshot || rules))}
+                  onClick={() => (isEngine ? handleExport('pdf') : exportPDF(staff, roster, week.label, currentDepartmentCode, currentDepartmentName, period?.rules_snapshot || rules, shiftTimes))}
                   disabled={exporting === 'pdf'}
                   style={btn('#dc2626', '#fff')}
                 >
@@ -491,6 +513,17 @@ export default function RosterApp() {
               coverageRules={coverageRules}
               departmentId={effectiveDepartmentId}
               onRulesChanged={setCoverageRules}
+            />
+          )}
+
+          {!isEngine && (
+            <ShiftTimesPanel
+              departmentCode={currentDepartmentCode}
+              departmentId={effectiveDepartmentId}
+              shiftTimes={shiftTimes}
+              status={shiftTimesStatus}
+              canEdit={canEditShiftTimes}
+              onSaved={(updated) => { setShiftTimes(updated); setShiftTimesStatus('ready'); }}
             />
           )}
 
@@ -538,6 +571,7 @@ export default function RosterApp() {
                 rules={rules}
                 editMode={editMode && isDraft}
                 showOutlet={showOutlet}
+                shiftTimes={shiftTimes}
                 onCellChange={handleCellChange}
                 onRemove={(staffId) => {
                   if (window.confirm('Remove this staff member from the roster?')) handleDeleteStaff(staffId);

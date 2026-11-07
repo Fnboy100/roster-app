@@ -1,5 +1,6 @@
 import ShiftBadge from './ShiftBadge';
 import { DAYS, WEEKEND_DAYS, POSITION_COLORS, DEPARTMENT_POSITIONS, makeCell } from '../data/constants';
+import { shiftTitle } from '../utils/shiftTimes';
 
 // Canonical ordering across every department's position list, so groups
 // render in a sensible order no matter which department's staff are being
@@ -10,7 +11,7 @@ import { DAYS, WEEKEND_DAYS, POSITION_COLORS, DEPARTMENT_POSITIONS, makeCell } f
 const ALL_KNOWN_POSITIONS = Object.values(DEPARTMENT_POSITIONS).flat();
 const FALLBACK_POSITION_COLOR = { bg: '#f8fafc', border: '#94a3b8', text: '#334155' };
 
-export default function RosterTable({ staff, roster, rules, editMode, showOutlet = true, onCellChange, onRemove }) {
+export default function RosterTable({ staff, roster, rules, editMode, showOutlet = true, shiftTimes = null, onCellChange, onRemove }) {
   const presentPositions = [...new Set(staff.map(s => s.position))];
   const orderedPositions = [
     ...ALL_KNOWN_POSITIONS.filter(p => presentPositions.includes(p)),
@@ -75,6 +76,7 @@ export default function RosterTable({ staff, roster, rules, editMode, showOutlet
                         editable={editMode}
                         locked={isWknd && rules.noOffWeekends}
                         showOutlet={showOutlet}
+                        title={shiftTitle(shiftTimes, (roster[s.id]?.[day] || {}).shift)}
                         onChange={v => onCellChange(s.id, day, v)}
                       />
                     </td>

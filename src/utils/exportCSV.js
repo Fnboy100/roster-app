@@ -1,6 +1,10 @@
 // ─── roster-app/src/utils/exportCSV.js ───────────────────────────────────────
 //
-// exportCSV(staff, roster, weekLabel, departmentCode, departmentName, rules)
+// exportCSV(staff, roster, weekLabel, departmentCode, departmentName, rules, shiftTimes)
+//
+// `shiftTimes` (optional, last argument) is the department's persisted AM/PM
+// times (GET /roster/shift-times); once saved they replace the standard
+// legend wording — see shiftLegendForDepartment in data/constants.js.
 //
 // `departmentCode` (optional) drops the outlet suffix from each cell for
 // departments that don't use outlet tags (see DEPARTMENT_SHIFT_LEGEND in
@@ -30,8 +34,8 @@ function toCsvRow(fields) {
   return fields.map(escapeCsvField).join(',');
 }
 
-export function exportCSV(staff, roster, weekLabel, departmentCode, departmentName, rules) {
-  const legend = shiftLegendForDepartment(departmentCode);
+export function exportCSV(staff, roster, weekLabel, departmentCode, departmentName, rules, shiftTimes) {
+  const legend = shiftLegendForDepartment(departmentCode, shiftTimes);
   const title = (departmentName || departmentCode || 'Roster').toUpperCase();
   const noOffWeekends = !!(rules && rules.noOffWeekends);
 

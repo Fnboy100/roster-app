@@ -1,14 +1,16 @@
-feat(section-device): collect reason on post check-out/check-in
-- Checking out of post now opens a required reason field before submitting
-- Checking back in at post shows the same field but optional/skippable
-- runAction/handleAction updated to pass notes through to the API client
+feat(roster): add Bar Head role and editable AM/PM shift times
 
-feat(shift-reports): new Shift Reports page
-- Date/shift/department filters with grouped-by-department attendance and closing views
-- CSV/PDF export buttons, matching PresenceReports page conventions
-- Wired into App.jsx routing and Layout.jsx nav, gated to admin/manager/outlet_manager
+- Add "Bar Head" to the Bar position list with its own pink colour
+  (WCAG AAA text contrast), distinct from Supervisor, Bartender and
+  Barback.
+- Add a Shift times panel above the rota for AM/PM departments. It
+  shows the legend to everyone and lets admins and managers edit with
+  client-side validation, loading, saving, success and error states,
+  and double-submit protection.
+- Use the saved times in the legend, cell tooltips, CSV and PDF
+  exports. The old legend wording is kept until times are saved.
+- Fall back to the standard legend if the shift-times API fails, so the
+  roster still loads when the frontend deploys before the migration.
+- Add node:test tests (npm test, no new dependencies).
 
-feat(api): shift report client functions
-- getStartOfShiftReport / getEndOfShiftReport
-- exportStartOfShiftReport / exportEndOfShiftReport (CSV/PDF download)
-- SHIFT_LABELS constant
+Requires backend migration 0011.

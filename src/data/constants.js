@@ -1,5 +1,7 @@
 // ─── roster-app/src/data/constants.js ────────────────────────────────────────
 
+import { legendFromShiftTimes } from '../utils/shiftTimes.js';
+
 export const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 export const WEEKEND_DAYS = ["Friday", "Saturday", "Sunday"];
 export const SHIFTS = ["AM", "PM", "Off"];
@@ -36,8 +38,19 @@ const DEFAULT_SHIFT_LEGEND = {
   showOutlet: true,
 };
 
-export function shiftLegendForDepartment(departmentCode) {
-  return DEPARTMENT_SHIFT_LEGEND[departmentCode] || DEFAULT_SHIFT_LEGEND;
+// `shiftTimes` (optional) is the department's GET /roster/shift-times
+// response. Once a manager has saved their own AM/PM times
+// (is_default === false) the legend text is built from those persisted
+// values; until then — or if they couldn't be loaded — the legacy text
+// above is used unchanged, so existing departments' exports read exactly
+// as they always have until someone edits the times.
+export function shiftLegendForDepartment(departmentCode, shiftTimes) {
+  const base = DEPARTMENT_SHIFT_LEGEND[departmentCode] || DEFAULT_SHIFT_LEGEND;
+  if (shiftTimes && shiftTimes.is_default === false) {
+    const fromTimes = legendFromShiftTimes(shiftTimes);
+    if (fromTimes) return { ...base, ...fromTimes };
+  }
+  return base;
 }
 
 export function departmentShowsOutlet(departmentCode) {
@@ -73,6 +86,9 @@ export const POSITION_COLORS = {
   Supervisor: { bg: "#fff7ed", border: "#f59e42", text: "#7c3500" },
   Bartender:  { bg: "#f0f9ff", border: "#38bdf8", text: "#0c4a6e" },
   Barback:    { bg: "#f5f3ff", border: "#a78bfa", text: "#3b0764" },
+  // Bar Head — pink: clearly apart from Supervisor (orange), Bartender (sky
+  // blue) and Barback (violet). text-on-bg contrast is ~11:1 (WCAG AAA).
+  "Bar Head": { bg: "#fdf2f8", border: "#ec4899", text: "#831843" },
 
   // --- Kitchen (red / orange family) ---
   "Hot Section":       { bg: "#fef2f2", border: "#ef4444", text: "#7f1d1d" },
@@ -127,7 +143,7 @@ export const DEFAULT_RULES = {
 // POSITION_COLORS above, its own distinct badge styling) instead of every
 // department sharing the Bar's Supervisor/Bartender/Barback list.
 export const DEPARTMENT_POSITIONS = {
-  BAR:         ["Supervisor", "Bartender", "Barback"],
+  BAR:         ["Supervisor", "Bar Head", "Bartender", "Barback"],
   KITCHEN:     ["Hot Section", "Salad & Dessert", "Bakery", "Chinese Section", "Sushi Section", "Butcher"],
   FLOOR:       ["Floor Supervisor", "Butler", "Waiter", "Host", "Runner", "Cashier", "CRM Officer", "Hostess"],
   STEWARDING:  ["Steward Supervisor", "Steward"],

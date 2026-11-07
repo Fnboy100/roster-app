@@ -11,11 +11,12 @@ import { SHIFTS, OUTLETS, OUTLET_LABELS, SHIFT_STYLES, OUTLET_BADGE_STYLES, cell
  *  value       → { shift, outlet }
  *  editable    → boolean
  *  locked      → boolean (weekends: hide Off option)
+ *  title       → optional tooltip, e.g. "11am\u20136pm" — the persisted time range of this AM/PM shift
  *  showOutlet  → boolean, default true — false hides the outlet badge/picker
  *                entirely (e.g. Stewarding, which doesn't use outlet tags)
  *  onChange    → (newCell: { shift, outlet }) => void
  */
-export default function ShiftBadge({ value, editable, locked, showOutlet = true, onChange }) {
+export default function ShiftBadge({ value, editable, locked, showOutlet = true, title, onChange }) {
   const cell       = value || makeCell('Off', 'none');
   const shiftStyle = SHIFT_STYLES[cell.shift] || SHIFT_STYLES['Off'];
   const outletStyle = OUTLET_BADGE_STYLES[cell.outlet] || OUTLET_BADGE_STYLES['none'];
@@ -25,7 +26,7 @@ export default function ShiftBadge({ value, editable, locked, showOutlet = true,
   // ── View mode ──────────────────────────────────────────────────────────
   if (!editable) {
     return (
-      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+      <div title={title} style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
         <span style={{
           padding: '2px 8px', borderRadius: 6, fontSize: 11, fontWeight: 700,
           background: shiftStyle.bg, color: shiftStyle.text, border: `1.5px solid ${shiftStyle.border}`,

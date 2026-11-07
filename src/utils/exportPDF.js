@@ -7,7 +7,11 @@
  *
  * Usage:
  *   import { exportPDF } from './utils/exportPDF';
- *   exportPDF(staff, roster, weekLabel, departmentCode, departmentName);
+ *   exportPDF(staff, roster, weekLabel, departmentCode, departmentName, rules, shiftTimes);
+ *
+ * `shiftTimes` (optional) is the department's persisted AM/PM times
+ * (GET /roster/shift-times); once saved they replace the standard legend
+ * wording — see shiftLegendForDepartment in data/constants.js.
  *
  * `departmentCode` (optional) switches the AM/PM legend text and outlet
  * visibility per DEPARTMENT_SHIFT_LEGEND in data/constants.js.
@@ -55,8 +59,8 @@ function hexToRgb(hex) {
   return [(num >> 16) & 255, (num >> 8) & 255, num & 255];
 }
 
-export function exportPDF(staff, roster, weekLabel, departmentCode, departmentName, rules) {
-  const legend = shiftLegendForDepartment(departmentCode);
+export function exportPDF(staff, roster, weekLabel, departmentCode, departmentName, rules, shiftTimes) {
+  const legend = shiftLegendForDepartment(departmentCode, shiftTimes);
   // Only true when this roster was actually generated with the "No Off
   // Fri/Sat/Sun" rule turned on — previously the weekend marker and its
   // legend line were always shown regardless of the rule, which was
